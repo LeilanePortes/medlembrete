@@ -4,7 +4,7 @@ Aplicativo Flutter que **lembra o horário do remédio** e pede uma **foto da ca
 
 | Recurso exigido | Como aparece no app |
 |---|---|
-| 🔔 **Notificação local** | Lembrete diário no horário de cada remédio. Tocar na notificação abre a tela "Hora do remédio" |
+| 🔔 **Notificação local** | Lembrete em cada dose da agenda do remédio (ex.: de 8 em 8 h, por 7 dias). Tocar na notificação abre a tela "Hora do remédio" |
 | 📷 **Câmera** | Foto da caixa/comprimido como comprovante, exibida na tela e salva no histórico |
 | 📍 **GPS** | Latitude e longitude atuais; compara com a "casa" salva para dizer *em casa* ou *fora* |
 | 📈 **Acelerômetro** | Valores X, Y e Z em tempo real; detecta *parado*, *em movimento*, *esquecido* e movimentos bruscos |
@@ -21,7 +21,7 @@ Aplicativo Flutter que **lembra o horário do remédio** e pede uma **foto da ca
 
 Pré-requisitos: Flutter 3.47+ (Dart 3.13+) e Google Chrome. **Não precisa de Android Studio.**
 
-### 🌐 No Chrome (forma usada na apresentação)
+### 🌐 No Chrome
 
 ```bash
 flutter pub get
@@ -30,7 +30,15 @@ flutter run -d chrome
 
 No VS Code: escolha **Chrome** como dispositivo na barra inferior e aperte **F5** (ou use a configuração *"MedLembrete (Chrome)"* em `.vscode/launch.json`).
 
-> **Para a apresentação, prefira o modo servidor:** `flutter run -d web-server --web-port 8080` e abra **http://localhost:8080** no seu Chrome normal (configuração *"MedLembrete (apresentação: localhost:8080)"*). No `-d chrome` o Flutter abre um Chrome "de depuração" em que **clicar na notificação não abre o app** (limitação do plugin) e as permissões são esquecidas a cada execução.
+#### Modo servidor (recomendado para testar as notificações)
+
+```bash
+flutter run -d web-server --web-port 8080
+```
+
+Depois abra **http://localhost:8080** no seu Chrome normal (no VS Code: configuração *"MedLembrete (servidor: localhost:8080)"*).
+
+> No `-d chrome` o Flutter abre um Chrome "de depuração" em que **clicar na notificação não abre o app** (limitação do plugin) e as permissões são esquecidas a cada execução. No modo servidor as duas coisas funcionam normalmente.
 
 Como cada recurso funciona no navegador:
 
@@ -54,8 +62,8 @@ O mapa precisa de **internet**.
 ```
 Abrir o app ──► pede permissão de NOTIFICAÇÃO (no Chrome: aviso com botão "Permitir")
    │
-   ├─ Remédios ─► + Adicionar (nome, dosagem, horário) ─► lembrete diário agendado
-   │                └─ "Testar" ─► notificação em 10 s (para demonstração)
+   ├─ Remédios ─► + Adicionar (nome, dosagem, agenda) ─► lembretes agendados
+   │                └─ "Testar" ─► notificação em 10 s
    │
    ├─ 🔔 Notificação "Hora do remédio" ─► toque ─► Tela da dose
    │        ├─ GPS lido automaticamente ─► pede permissão de LOCALIZAÇÃO
@@ -66,6 +74,30 @@ Abrir o app ──► pede permissão de NOTIFICAÇÃO (no Chrome: aviso com bot
    ├─ Local ─► latitude/longitude, "Estou em casa agora", distância e mapa
    └─ Movimento ─► X, Y, Z em tempo real, gráfico, estado, alerta de esquecido
 ```
+
+## 📅 Agenda do remédio
+
+No cadastro, cada remédio tem:
+
+| Campo | Exemplo |
+|---|---|
+| **Início** | 18/11/2026 (pode ser hoje, no passado ou no futuro) |
+| **1ª dose do dia** | 08:00 |
+| **Frequência** | 1x ao dia, de 12 em 12 h, de 8 em 8 h, de 6 em 6 h ou de 4 em 4 h |
+| **Dias da semana** | Todos, ou só alguns (ex.: Seg, Qua, Sex) |
+| **Duração** | Uso contínuo ou por um período (ex.: 7 dias) |
+
+Exemplo: **Amoxicilina, a partir de 18/11 às 08:00, de 8 em 8 h, por 7 dias** → 08:00, 16:00 e 00:00, num total de 21 doses; a última é em 25/11 às 00:00. O formulário mostra esse resumo antes de salvar.
+
+Como os lembretes são agendados:
+
+- **Uso contínuo:** uma notificação por horário do dia que se repete sozinha, todo dia (`DateTimeComponents.time`) ou só nos dias da semana escolhidos (`dayOfWeekAndTime`).
+- **Tratamento com fim:** cada dose é agendada individualmente até a última (até 60 de uma vez; o app completa a lista sempre que é aberto).
+- **No Chrome:** só a próxima dose fica num `Timer`; quando ela dispara, o app agenda a seguinte.
+
+Na hora de comprovar, o app escolhe **a dose ainda não tomada mais próxima do horário atual** (ex.: às 15:50, a das 16:00; às 11:00 com a das 08:00 esquecida, a das 08:00). O comprovante guarda a data e hora exatas da dose que ele cumpre.
+
+Remédios cadastrados antes dessa versão continuam funcionando como **1x ao dia, todos os dias, uso contínuo**.
 
 ## 🔐 Permissões
 
@@ -98,6 +130,7 @@ O acelerômetro **não exige permissão** no Android. Se alguma permissão for b
 | `sensors_plus` | Stream do acelerômetro (X, Y, Z) |
 | `flutter_map` + `latlong2` | Mapa OpenStreetMap |
 | `shared_preferences` | Salvar remédios, histórico e configurações |
+| `flutter_localizations` | Calendário, relógio e botões padrão em português |
 
 ## 🗂️ Organização do projeto
 
@@ -107,7 +140,8 @@ lib/
 ├── app.dart                  # MaterialApp, tema e navigatorKey
 ├── core/                     # tema, constantes e formatadores
 ├── models/
-│   ├── medicamento.dart      # remédio + horário do lembrete
+│   ├── medicamento.dart      # remédio + agenda (início, frequência, dias, duração)
+│   ├── dose_agendada.dart    # uma dose prevista na agenda (+ comprovante, se tomada)
 │   └── dose.dart             # comprovante: foto + GPS + estado do celular
 ├── services/                 # regras de negócio e acesso aos recursos
 │   ├── notification_service.dart     # 🔔 notificações
@@ -140,8 +174,9 @@ O desenvolvimento foi feito em sprints, cada uma em sua branch, mergeada na `mai
 | 3 | `sprint-3/gps` | Latitude/longitude + em casa ou fora |
 | 4 | `sprint-4/acelerometro` | X, Y, Z em tempo real + detecção de estado |
 | 5 | `sprint-5/integracao` | Desafio extra: comprovante completo, mapa, alerta de esquecido |
-| 6 | `sprint-6/docs` | README e roteiro da apresentação |
+| 6 | `sprint-6/docs` | README e documentação |
 | 7 | `sprint-7/web` | Rodar no Chrome: webcam, fotos no navegador, lembretes por timer, modo simulação do acelerômetro |
+| 8 | `sprint-8/agendamento` | Agenda completa: data de início, frequência (de X em X horas), dias da semana e duração do tratamento |
 
 ```bash
 git log --oneline --graph   # ver o histórico das sprints
@@ -154,16 +189,17 @@ flutter analyze
 flutter test
 ```
 
-Os testes cobrem modelos, repositórios, cálculo de distância/“em casa”, o detector de movimento, o resumo do dia, o simulador do acelerômetro, a conversão das fotos para data URL e o cálculo do próximo horário na web.
+Os testes cobrem modelos, repositórios, cálculo de distância/“em casa”, o detector de movimento, o resumo do dia, o simulador do acelerômetro, a conversão das fotos para data URL e a agenda dos remédios (frequência, dias da semana, duração, dose a comprovar).
 
-## 🧪 Checklist antes da apresentação
+## 🧪 Testando cada recurso
 
-- [ ] `flutter run -d web-server --web-port 8080` e abrir **http://localhost:8080** no Chrome que será projetado
+- [ ] `flutter run -d web-server --web-port 8080` e abrir **http://localhost:8080** no Chrome
 - [ ] Clicar em **Permitir** no aviso de notificações (e aceitar no pop-up do Chrome)
 - [ ] Windows: **Configurações → Sistema → Notificações** ligadas para o Chrome e **"Não perturbe" desligado**
-- [ ] Cadastrar um remédio e usar **"Testar"** → a notificação chega em 10 s
+- [ ] Cadastrar um remédio (ex.: de 8 em 8 h por 7 dias) e conferir o **resumo da agenda** antes de salvar
+- [ ] Usar **"Testar"** → a notificação chega em 10 s
 - [ ] Clicar na notificação → abrir a webcam → tirar a foto → confirmar
 - [ ] Na aba **Local**: permitir localização → "Estou em casa agora"
 - [ ] Na aba **Movimento**: modo simulação ligado → *Na mesa* → "Parado" → depois de 30 s chega "📱 Celular esquecido?"
-- [ ] Conferir internet para o mapa
-- [ ] Testar a webcam do notebook que será usado (ou ter uma imagem da caixa do remédio salva para o plano B)
+- [ ] Abrir um comprovante no **Histórico**: foto, coordenadas, mapa e estado do celular (o mapa precisa de internet)
+- [ ] Sem webcam? Use **"Escolher um arquivo de imagem"** na tela da dose
