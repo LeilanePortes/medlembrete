@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/formatters.dart';
 import '../models/dose.dart';
 import 'camera_service.dart';
+import 'estoque_service.dart';
 
 /// Histórico de doses comprovadas (mais recentes primeiro).
 class DoseRepository extends ChangeNotifier {
@@ -46,10 +47,15 @@ class DoseRepository extends ChangeNotifier {
     await _persistir();
   }
 
-  /// Remove o registro e apaga a foto do armazenamento.
+  /// Remove o registro, apaga a foto e devolve ao estoque o que a dose
+  /// tinha descontado.
   Future<void> remover(Dose dose) async {
     _itens.removeWhere((d) => d.id == dose.id);
     await CameraService.instance.apagarComprovante(dose.fotoPath);
+    final unidades = dose.unidadesDescontadas;
+    if (unidades != null) {
+      await EstoqueService.instance.devolver(dose.medicamentoId, unidades);
+    }
     await _persistir();
   }
 

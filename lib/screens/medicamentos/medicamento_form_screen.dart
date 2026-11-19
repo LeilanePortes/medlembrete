@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/formatters.dart';
+import '../../core/theme/app_theme.dart';
 import '../../models/medicamento.dart';
 import '../../services/medicamento_repository.dart';
 import '../../services/notification_service.dart';
 
 /// Cadastro / edição de um remédio e da sua agenda de doses:
-/// data de início, horário da 1ª dose, frequência, dias da semana
-/// e duração do tratamento.
+/// data de início, horário da 1ª dose, frequência, dias da semana,
+/// duração do tratamento e (opcional) controle de estoque.
 class MedicamentoFormScreen extends StatefulWidget {
   const MedicamentoFormScreen({super.key, this.medicamento});
 
@@ -31,6 +32,13 @@ class _MedicamentoFormScreenState extends State<MedicamentoFormScreen> {
   late int _intervalo;
   late Set<int> _diasSemana;
   late bool _continuo;
+
+  // Estoque (opcional)
+  late bool _controlaEstoque;
+  late final TextEditingController _estoque;
+  late final TextEditingController _porDose;
+  late String _unidade;
+  late int _avisarDias;
   bool _salvando = false;
 
   bool get _editando => widget.medicamento != null;
@@ -51,6 +59,11 @@ class _MedicamentoFormScreenState extends State<MedicamentoFormScreen> {
     _intervalo = m?.intervaloHoras ?? 24;
     _diasSemana = {...(m?.diasSemana ?? Medicamento.todosOsDias)};
     _continuo = m == null || m.duracaoDias == null;
+    _controlaEstoque = m?.controlaEstoque ?? false;
+    _estoque = TextEditingController(text: m?.estoque?.toString() ?? '');
+    _porDose = TextEditingController(text: '${m?.unidadesPorDose ?? 1}');
+    _unidade = m?.unidade ?? 'comprimido';
+    _avisarDias = m?.avisarDias ?? 3;
   }
 
   @override
@@ -58,7 +71,32 @@ class _MedicamentoFormScreenState extends State<MedicamentoFormScreen> {
     _nome.dispose();
     _dosagem.dispose();
     _dias.dispose();
+    _estoque.dispose();
+    _porDose.dispose();
     super.dispose();
+  }
+
+  int get _unidadesPorDose {
+    final n = int.tryParse(_porDose.text.trim());
+    return (n == null || n < 1) ? 1 : n;
+  }
+
+  int? get _quantidadeEstoque {
+    if (!_controlaEstoque) return null;
+    final n = int.tryParse(_estoque.text.trim());
+    return (n == null || n < 0) ? null : n;
+  }
+
+  /// Liga o controle de estoque e sugere uma quantidade: o total de doses
+  /// do tratamento (se tiver fim) ou uma caixa de 30.
+  void _alternarEstoque(bool ligar) {
+    setState(() {
+      _controlaEstoque = ligar;
+      if (ligar && _estoque.text.trim().isEmpty) {
+        final precisa = _montar().unidadesAteOFim();
+        _estoque.text = '${precisa ?? 30}';
+      }
+    });
   }
 
   int? get _duracaoDias {
@@ -81,6 +119,10 @@ class _MedicamentoFormScreenState extends State<MedicamentoFormScreen> {
       intervaloHoras: _intervalo,
       diasSemana: {..._diasSemana},
       duracaoDias: _duracaoDias,
+      estoque: _quantidadeEstoque,
+      unidadesPorDose: _unidadesPorDose,
+      unidade: _unidade,
+      avisarDias: _avisarDias,
     );
   }
 
@@ -146,6 +188,121 @@ class _MedicamentoFormScreenState extends State<MedicamentoFormScreen> {
       ),
     );
     Navigator.of(context).pop();
+  }
+
+  /// Seção opcional "Estoque": quantidade em casa, unidade, quanto
+  /// desconta por dose e quando avisar que está acabando.
+  Widget _secaoEstoque(BuildContext context, Medicamento previa) {
+    final scheme = Theme.of(context).colorScheme;
+    final plural = Medicamento.unidades[_unidade] ?? _unidade;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 4, 0, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SwitchListTile(
+              secondary: Icon(Icons.inventory_2_outlined,
+                  color: scheme.primary),
+              title: const Text('Controlar estoque'),
+              subtitle: const Text(
+                  'Desconta a cada dose e avisa quando estiver acabando'),
+              value: _controlaEstoque,
+              onChanged: _alternarEstoque,
+            ),
+            if (_controlaEstoque)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final u in Medicamento.unidades.keys)
+                          ChoiceChip(
+                            label: Text(Medicamento.unidades[u]!),
+                            selected: _unidade == u,
+                            onSelected: (_) => setState(() => _unidade = u),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: TextFormField(
+                            controller: _estoque,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            decoration: InputDecoration(
+                              labelText: 'Quantidade em casa',
+                              suffixText: plural,
+                            ),
+                            onChanged: (_) => setState(() {}),
+                            validator: (v) {
+                              final n = int.tryParse(v?.trim() ?? '');
+                              return (n == null || n > 9999)
+                                  ? 'De 0 a 9999'
+                                  : null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: TextFormField(
+                            controller: _porDose,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            decoration:
+                                const InputDecoration(labelText: 'Por dose'),
+                            onChanged: (_) => setState(() {}),
+                            validator: (v) {
+                              final n = int.tryParse(v?.trim() ?? '');
+                              return (n == null || n < 1 || n > 99)
+                                  ? 'De 1 a 99'
+                                  : null;
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text('Avisar quando der só para',
+                        style: TextStyle(color: scheme.onSurfaceVariant)),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        for (final d in Medicamento.opcoesAvisarDias)
+                          ChoiceChip(
+                            label: Text('$d ${d == 1 ? 'dia' : 'dias'}'),
+                            selected: _avisarDias == d,
+                            onSelected: (_) =>
+                                setState(() => _avisarDias = d),
+                          ),
+                      ],
+                    ),
+                    if (previa.controlaEstoque) ...[
+                      const SizedBox(height: 12),
+                      _PrevisaoEstoque(medicamento: previa),
+                    ],
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -326,6 +483,8 @@ class _MedicamentoFormScreenState extends State<MedicamentoFormScreen> {
               ),
             ],
             const SizedBox(height: 24),
+            _secaoEstoque(context, previa),
+            const SizedBox(height: 24),
             _ResumoAgenda(medicamento: previa),
             const SizedBox(height: 24),
             FilledButton.icon(
@@ -336,6 +495,58 @@ class _MedicamentoFormScreenState extends State<MedicamentoFormScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Previsão do estoque mostrada no formulário: quanto tempo dura e se
+/// basta para terminar o tratamento.
+class _PrevisaoEstoque extends StatelessWidget {
+  const _PrevisaoEstoque({required this.medicamento});
+
+  final Medicamento medicamento;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = medicamento;
+    final falta = m.faltaParaOFim();
+    final ate = m.estoqueDuraAte();
+    final dias = m.diasDeEstoque() ?? 0;
+
+    final (IconData icone, Color cor, String texto) = switch (m) {
+      _ when m.estoqueAcabou => (
+          Icons.error_outline,
+          AppTheme.perigo,
+          'Sem estoque para nenhuma dose.',
+        ),
+      _ when falta != null && falta > 0 => (
+          Icons.warning_amber,
+          AppTheme.alerta,
+          'Faltam ${m.descreverQuantidade(falta)} para terminar o '
+              'tratamento.',
+        ),
+      _ when falta == 0 => (
+          Icons.check_circle_outline,
+          AppTheme.sucesso,
+          'Suficiente para todo o tratamento.',
+        ),
+      _ => (
+          m.estoqueBaixo ? Icons.warning_amber : Icons.check_circle_outline,
+          m.estoqueBaixo ? AppTheme.alerta : AppTheme.sucesso,
+          'Dá para $dias ${dias == 1 ? 'dia' : 'dias'}'
+              '${ate == null ? '' : ' (até ${formatarData(ate).substring(0, 5)})'}.',
+        ),
+    };
+
+    return Row(
+      children: [
+        Icon(icone, color: cor, size: 20),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(texto,
+              style: TextStyle(color: cor, fontWeight: FontWeight.w600)),
+        ),
+      ],
     );
   }
 }

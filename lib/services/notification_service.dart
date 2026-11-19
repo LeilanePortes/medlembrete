@@ -25,6 +25,9 @@ class NotificationService {
   /// Prefixo do payload das notificações de remédio: `dose:<id>`.
   static const String prefixoDose = 'dose:';
 
+  /// Prefixo do aviso de estoque baixo: `estoque:<id>`.
+  static const String prefixoEstoque = 'estoque:';
+
   static const _canalLembretes = AndroidNotificationDetails(
     'lembretes_medicacao',
     'Lembretes de medicação',
@@ -164,9 +167,11 @@ class NotificationService {
   }
 
   String _titulo(Medicamento m) => '💊 Hora do remédio: ${m.nome}';
-  String _corpo(Medicamento m) =>
-      'Tome ${m.dosagem.isEmpty ? 'sua dose' : m.dosagem} e '
-      'toque aqui para comprovar com uma foto.';
+  String _corpo(Medicamento m) => m.estoqueAcabou
+      ? 'Seu estoque acabou: reponha para continuar o controle. '
+          'Tomou mesmo assim? Toque aqui para comprovar.'
+      : 'Tome ${m.dosagem.isEmpty ? 'sua dose' : m.dosagem} e '
+          'toque aqui para comprovar com uma foto.';
 
   /// Máximo de doses agendadas de uma vez para tratamentos com fim
   /// (o iOS aceita até 64 pendentes). O app completa a lista sempre que
@@ -371,6 +376,12 @@ class NotificationService {
     for (final m in medicamentos) {
       await agendarLembretes(m);
     }
+  }
+
+  /// Extrai o id do remédio de um payload `estoque:<id>`.
+  static int? idEstoqueDoPayload(String? payload) {
+    if (payload == null || !payload.startsWith(prefixoEstoque)) return null;
+    return int.tryParse(payload.substring(prefixoEstoque.length));
   }
 
   /// Extrai o id do remédio de um payload `dose:<id>`.

@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/formatters.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/medicamento.dart';
 import '../../services/dose_repository.dart';
+import '../../services/estoque_service.dart';
 import '../../services/medicamento_repository.dart';
 import '../../services/notification_service.dart';
 import '../../services/resumo_doses.dart';
@@ -54,6 +56,23 @@ class MedicamentosScreen extends StatelessWidget {
     final atualizado = m.copyWith(ativo: ativo);
     await MedicamentoRepository.instance.salvar(atualizado);
     await NotificationService.instance.agendarLembretes(atualizado);
+  }
+
+  /// Pergunta quantas unidades foram compradas e soma ao estoque.
+  Future<void> _repor(BuildContext context, Medicamento m) async {
+    final quantidade = await showDialog<int>(
+      context: context,
+      builder: (_) => _DialogoRepor(medicamento: m),
+    );
+    if (quantidade == null || quantidade <= 0) return;
+    final mudanca = await EstoqueService.instance.repor(m.id, quantidade);
+    if (mudanca == null || !context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Estoque de ${m.nome}: '
+            '${mudanca.depois.descreverQuantidade(mudanca.depois.estoque!)}.'),
+      ),
+    );
   }
 
   Future<void> _excluir(BuildContext context, Medicamento m) async {
@@ -132,6 +151,7 @@ class MedicamentosScreen extends StatelessWidget {
               medicamento: lista[i],
               onEditar: () => _abrirFormulario(context, lista[i]),
               onTestar: () => _testarNotificacao(context, lista[i]),
+              onRepor: () => _repor(context, lista[i]),
               onExcluir: () => _excluir(context, lista[i]),
               onAtivo: (v) => _alternarAtivo(lista[i], v),
             ),
@@ -167,11 +187,111 @@ String? _situacao(Medicamento m, DateTime agora) {
   return 'Até ${formatarData(ultima).substring(0, 5)} ($quando)';
 }
 
+/// "📦 Restam 12 comprimidos (≈ 4 dias)" — em laranja quando está
+/// acabando e em vermelho quando acabou.
+/// Diálogo "Repor": quantas unidades foram compradas.
+class _DialogoRepor extends StatefulWidget {
+  const _DialogoRepor({required this.medicamento});
+
+  final Medicamento medicamento;
+
+  @override
+  State<_DialogoRepor> createState() => _DialogoReporState();
+}
+
+class _DialogoReporState extends State<_DialogoRepor> {
+  final _campo = TextEditingController();
+
+  @override
+  void dispose() {
+    _campo.dispose();
+    super.dispose();
+  }
+
+  void _confirmar() =>
+      Navigator.pop(context, int.tryParse(_campo.text.trim()));
+
+  @override
+  Widget build(BuildContext context) {
+    final m = widget.medicamento;
+    return AlertDialog(
+      title: Text('Repor ${m.nome}'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (m.controlaEstoque)
+            Text('Agora: ${m.descreverQuantidade(m.estoque!)}'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _campo,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: InputDecoration(
+              labelText: 'Quantos você comprou?',
+              suffixText: Medicamento.unidades[m.unidade] ?? m.unidade,
+            ),
+            onSubmitted: (_) => _confirmar(),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final n in const [10, 20, 30, 60])
+                ActionChip(
+                  label: Text('+$n'),
+                  onPressed: () => Navigator.pop(context, n),
+                ),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(onPressed: _confirmar, child: const Text('Repor')),
+      ],
+    );
+  }
+}
+
+class _LinhaEstoque extends StatelessWidget {
+  const _LinhaEstoque({required this.medicamento});
+
+  final Medicamento medicamento;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = medicamento;
+    final dias = m.diasDeEstoque() ?? 0;
+    final texto = m.estoqueAcabou
+        ? '📦 Estoque acabou'
+        : '📦 Restam ${m.descreverQuantidade(m.estoque!)} '
+            '(≈ $dias ${dias == 1 ? 'dia' : 'dias'})';
+    final cor = m.estoqueAcabou
+        ? AppTheme.perigo
+        : m.estoqueBaixo
+            ? AppTheme.alerta
+            : Theme.of(context).colorScheme.onSurfaceVariant;
+    return Text(
+      texto,
+      style: TextStyle(
+        color: cor,
+        fontWeight: m.estoqueBaixo ? FontWeight.w600 : FontWeight.normal,
+      ),
+    );
+  }
+}
+
 class _MedicamentoTile extends StatelessWidget {
   const _MedicamentoTile({
     required this.medicamento,
     required this.onEditar,
     required this.onTestar,
+    required this.onRepor,
     required this.onExcluir,
     required this.onAtivo,
   });
@@ -179,6 +299,7 @@ class _MedicamentoTile extends StatelessWidget {
   final Medicamento medicamento;
   final VoidCallback onEditar;
   final VoidCallback onTestar;
+  final VoidCallback onRepor;
   final VoidCallback onExcluir;
   final ValueChanged<bool> onAtivo;
 
@@ -249,6 +370,7 @@ class _MedicamentoTile extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
+                      if (m.controlaEstoque) _LinhaEstoque(medicamento: m),
                     ],
                   ),
                 ),
@@ -274,6 +396,12 @@ class _MedicamentoTile extends StatelessWidget {
                   icon: const Icon(Icons.timer_10_outlined, size: 18),
                   label: const Text('Testar'),
                 ),
+                if (m.controlaEstoque)
+                  TextButton.icon(
+                    onPressed: onRepor,
+                    icon: const Icon(Icons.add_box_outlined, size: 18),
+                    label: const Text('Repor'),
+                  ),
                 IconButton(
                   tooltip: 'Editar',
                   onPressed: onEditar,

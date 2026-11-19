@@ -10,6 +10,10 @@
 ///
 /// Como todos os intervalos dividem 24 h, os horários se repetem iguais
 /// todos os dias. Ex.: 08:00 de 8 em 8 h → 00:00, 08:00 e 16:00.
+///
+/// Estoque (opcional): [estoque] unidades em casa, [unidadesPorDose]
+/// descontadas a cada dose comprovada e aviso quando sobrarem doses para
+/// [avisarDias] dias.
 class Medicamento {
   const Medicamento({
     required this.id,
@@ -22,6 +26,10 @@ class Medicamento {
     this.intervaloHoras = 24,
     this.diasSemana = todosOsDias,
     this.duracaoDias,
+    this.estoque,
+    this.unidadesPorDose = 1,
+    this.unidade = 'comprimido',
+    this.avisarDias = 3,
   });
 
   /// Frequências oferecidas no cadastro.
@@ -29,6 +37,17 @@ class Medicamento {
 
   /// Dias da semana no padrão do Dart: segunda = 1 ... domingo = 7.
   static const Set<int> todosOsDias = {1, 2, 3, 4, 5, 6, 7};
+  /// Unidades oferecidas no cadastro (singular → plural).
+  static const Map<String, String> unidades = {
+    'comprimido': 'comprimidos',
+    'cápsula': 'cápsulas',
+    'gota': 'gotas',
+    'mL': 'mL',
+  };
+
+  /// Opções de "avisar quando restar N dias".
+  static const List<int> opcoesAvisarDias = [1, 3, 5, 7];
+
   static const List<String> nomesDias = [
     'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom', //
   ];
@@ -54,6 +73,16 @@ class Medicamento {
 
   /// Quantos dias o tratamento dura. null = uso contínuo.
   final int? duracaoDias;
+
+  /// Unidades em casa. null = o usuário não controla o estoque.
+  final int? estoque;
+  final int unidadesPorDose;
+
+  /// Chave de [unidades], ex.: "comprimido".
+  final String unidade;
+
+  /// Avisar quando o estoque der para só esse número de dias.
+  final int avisarDias;
 
   /// Gera um ID inteiro de 31 bits (limite das notificações no Android).
   static int novoId() =>
@@ -155,6 +184,112 @@ class Medicamento {
       fim != null && proximaOcorrencia(agora) == null;
 
   // ---------------------------------------------------------------------
+  // Estoque
+  // ---------------------------------------------------------------------
+
+  bool get controlaEstoque => estoque != null;
+
+  /// Doses por dia, em média (considera os dias da semana).
+  double get dosesPorDia => (24 / intervaloHoras) * diasSemana.length / 7;
+
+  /// Unidades gastas por dia, em média.
+  double get consumoDiario => dosesPorDia * unidadesPorDose;
+
+  /// Abaixo (ou igual) a esse número de unidades o estoque está baixo.
+  int get limiteAviso {
+    final limite = (consumoDiario * avisarDias).ceil();
+    return limite < unidadesPorDose ? unidadesPorDose : limite;
+  }
+
+  bool get estoqueBaixo => controlaEstoque && estoque! <= limiteAviso;
+  bool get estoqueAcabou => controlaEstoque && estoque! < unidadesPorDose;
+
+  /// Primeira e última dose que o estoque atual consegue cobrir a partir
+  /// de [agora] (null se não controla estoque ou não cobre nenhuma dose).
+  (DateTime, DateTime)? _coberturaDoEstoque(DateTime agora) {
+    if (!controlaEstoque) return null;
+    final doses = estoque! ~/ unidadesPorDose;
+    if (doses == 0) return null;
+    var de = agora;
+    final i = inicio;
+    if (i != null && i.isAfter(de)) de = i;
+    DateTime? primeira;
+    DateTime? ultima;
+    var contadas = 0;
+    // Procura de 30 em 30 dias (no máximo ~2 anos).
+    for (var bloco = 0; bloco < 25 && contadas < doses; bloco++) {
+      final ate = DateTime(de.year, de.month, de.day + 30);
+      for (final t in ocorrenciasEntre(de, ate)) {
+        primeira ??= t;
+        ultima = t;
+        if (++contadas == doses) break;
+      }
+      de = ate;
+      final f = fim;
+      if (f != null && !de.isBefore(f)) break;
+    }
+    return primeira == null ? null : (primeira, ultima!);
+  }
+
+  /// Data da última dose que o estoque atual consegue cobrir.
+  DateTime? estoqueDuraAte([DateTime? agora]) =>
+      _coberturaDoEstoque(agora ?? DateTime.now())?.$2;
+
+  /// Quantos dias de tratamento o estoque cobre, do dia da próxima dose
+  /// ao dia da última dose coberta (inclusive).
+  int? diasDeEstoque([DateTime? agora]) {
+    if (!controlaEstoque) return null;
+    final cobertura = _coberturaDoEstoque(agora ?? DateTime.now());
+    if (cobertura == null) return 0;
+    final (primeira, ultima) = cobertura;
+    final dia1 = DateTime(primeira.year, primeira.month, primeira.day);
+    final diaN = DateTime(ultima.year, ultima.month, ultima.day);
+    return diaN.difference(dia1).inDays + 1;
+  }
+
+  /// Unidades necessárias para as doses que faltam no tratamento
+  /// (null se for uso contínuo).
+  int? unidadesAteOFim([DateTime? agora]) {
+    final f = fim;
+    if (f == null) return null;
+    var de = agora ?? DateTime.now();
+    final i = inicio!;
+    if (i.isAfter(de)) de = i;
+    return ocorrenciasEntre(de, f).length * unidadesPorDose;
+  }
+
+  /// Quantas unidades faltam para terminar o tratamento (0 se o estoque
+  /// basta; null se não controla estoque ou é uso contínuo).
+  int? faltaParaOFim([DateTime? agora]) {
+    final precisa = unidadesAteOFim(agora);
+    if (precisa == null || !controlaEstoque) return null;
+    final falta = precisa - estoque!;
+    return falta > 0 ? falta : 0;
+  }
+
+  /// "1 comprimido", "12 comprimidos", "5 mL".
+  String descreverQuantidade(int n) =>
+      '$n ${n == 1 ? unidade : unidades[unidade] ?? unidade}';
+
+  /// Cópia com outro estoque (inclusive null = parar de controlar).
+  Medicamento comEstoque(int? novoEstoque) => Medicamento(
+        id: id,
+        nome: nome,
+        dosagem: dosagem,
+        hora: hora,
+        minuto: minuto,
+        ativo: ativo,
+        dataInicio: dataInicio,
+        intervaloHoras: intervaloHoras,
+        diasSemana: diasSemana,
+        duracaoDias: duracaoDias,
+        estoque: novoEstoque,
+        unidadesPorDose: unidadesPorDose,
+        unidade: unidade,
+        avisarDias: avisarDias,
+      );
+
+  // ---------------------------------------------------------------------
   // Textos
   // ---------------------------------------------------------------------
 
@@ -200,6 +335,10 @@ class Medicamento {
       intervaloHoras: intervaloHoras,
       diasSemana: diasSemana,
       duracaoDias: duracaoDias,
+      estoque: estoque,
+      unidadesPorDose: unidadesPorDose,
+      unidade: unidade,
+      avisarDias: avisarDias,
     );
   }
 
@@ -214,6 +353,10 @@ class Medicamento {
         'intervaloHoras': intervaloHoras,
         'diasSemana': diasSemana.toList()..sort(),
         'duracaoDias': duracaoDias,
+        'estoque': estoque,
+        'unidadesPorDose': unidadesPorDose,
+        'unidade': unidade,
+        'avisarDias': avisarDias,
       };
 
   /// Lê também remédios salvos antes da agenda existir (sem os campos
@@ -234,6 +377,12 @@ class Medicamento {
           intervalosPermitidos.contains(intervalo) ? intervalo : 24,
       diasSemana: (dias == null || dias.isEmpty) ? todosOsDias : dias,
       duracaoDias: json['duracaoDias'] as int?,
+      estoque: json['estoque'] as int?,
+      unidadesPorDose: json['unidadesPorDose'] as int? ?? 1,
+      unidade: unidades.containsKey(json['unidade'])
+          ? json['unidade'] as String
+          : 'comprimido',
+      avisarDias: json['avisarDias'] as int? ?? 3,
     );
   }
 }

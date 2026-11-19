@@ -87,6 +87,11 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _abrirPeloPayload(String? payload) {
+    // Aviso de estoque baixo: abre a lista de remédios (botão "Repor").
+    if (NotificationService.idEstoqueDoPayload(payload) != null) {
+      if (mounted) _irPara(1);
+      return;
+    }
     final id = NotificationService.idDoPayload(payload);
     if (id == null || !mounted) return;
     final medicamento = MedicamentoRepository.instance.porId(id);

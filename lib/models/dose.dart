@@ -14,6 +14,7 @@ class Dose {
     required this.dataHora,
     required this.fotoPath,
     this.previstoPara,
+    this.unidadesDescontadas,
     this.latitude,
     this.longitude,
     this.emCasa,
@@ -38,6 +39,10 @@ class Dose {
   /// Dose da agenda que este comprovante cumpre (dia + horário).
   /// null em registros antigos: aí vale o dia de [dataHora] + [horarioPrevisto].
   final DateTime? previstoPara;
+
+  /// Unidades tiradas do estoque por esta dose (devolvidas se o
+  /// comprovante for excluído). null = estoque não controlado.
+  final int? unidadesDescontadas;
 
   /// Caminho da foto de comprovação salva no armazenamento do app.
   final String fotoPath;
@@ -70,6 +75,7 @@ class Dose {
         'dataHora': dataHora.toIso8601String(),
         'fotoPath': fotoPath,
         'previstoPara': previstoPara?.toIso8601String(),
+        'unidadesDescontadas': unidadesDescontadas,
         'latitude': latitude,
         'longitude': longitude,
         'emCasa': emCasa,
@@ -90,6 +96,7 @@ class Dose {
       previstoPara: json['previstoPara'] == null
           ? null
           : DateTime.parse(json['previstoPara'] as String),
+      unidadesDescontadas: json['unidadesDescontadas'] as int?,
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
       emCasa: json['emCasa'] as bool?,
