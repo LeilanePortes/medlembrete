@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/formatters.dart';
 import '../services/medicamento_repository.dart';
 
 /// Mostra o próximo remédio a ser tomado (atualiza sozinho).
@@ -7,6 +8,16 @@ class ProximaDoseCard extends StatelessWidget {
   const ProximaDoseCard({super.key, required this.onTap});
 
   final VoidCallback onTap;
+
+  /// "Hoje", "Amanhã" ou "25/11".
+  static String rotuloDia(DateTime horario, [DateTime? agora]) {
+    final hoje = agora ?? DateTime.now();
+    if (mesmoDia(horario, hoje)) return 'Hoje';
+    if (mesmoDia(horario, DateTime(hoje.year, hoje.month, hoje.day + 1))) {
+      return 'Amanhã';
+    }
+    return formatarData(horario).substring(0, 5);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +27,8 @@ class ProximaDoseCard extends StatelessWidget {
     return ListenableBuilder(
       listenable: repositorio,
       builder: (context, _) {
-        final proximo = repositorio.proximaDose();
+        final proxima = repositorio.proximaDose();
+        final m = proxima?.medicamento;
         return Card(
           clipBehavior: Clip.antiAlias,
           child: ListTile(
@@ -30,20 +42,30 @@ class ProximaDoseCard extends StatelessWidget {
             ),
             title: const Text('Próxima dose'),
             subtitle: Text(
-              proximo == null
+              m == null
                   ? 'Nenhum lembrete ativo'
-                  : '${proximo.nome}'
-                      '${proximo.dosagem.isEmpty ? '' : ' • ${proximo.dosagem}'}',
+                  : '${m.nome}${m.dosagem.isEmpty ? '' : ' • ${m.dosagem}'}',
             ),
-            trailing: proximo == null
+            trailing: proxima == null
                 ? const Icon(Icons.chevron_right)
-                : Text(
-                    proximo.horario,
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color: scheme.primary,
-                    ),
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        formatarHora(proxima.horario),
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.primary,
+                        ),
+                      ),
+                      Text(
+                        rotuloDia(proxima.horario),
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant),
+                      ),
+                    ],
                   ),
           ),
         );

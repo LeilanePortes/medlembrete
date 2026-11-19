@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/formatters.dart';
 import '../core/theme/app_theme.dart';
 import '../services/detector_movimento.dart';
 import '../services/dose_repository.dart';
@@ -28,7 +29,7 @@ class StatusHojeCard extends StatelessWidget {
               ]),
               builder: (context, _) {
                 final (tomadas, total) = ResumoDoses.progressoHoje();
-                final pendentes = ResumoDoses.pendentesHoje();
+                final atrasadas = ResumoDoses.atrasadasHoje();
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -50,10 +51,10 @@ class StatusHojeCard extends StatelessWidget {
                         minHeight: 10,
                       ),
                     ),
-                    if (pendentes.isNotEmpty) ...[
+                    if (atrasadas.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(
-                        '⚠️ Atrasado: ${pendentes.map((m) => m.nome).join(', ')}',
+                        '⚠️ Atrasado: ${atrasadas.map((d) => '${d.medicamento.nome} (${formatarHora(d.horario)})').join(', ')}',
                         style: const TextStyle(
                           color: AppTheme.perigo,
                           fontWeight: FontWeight.w600,

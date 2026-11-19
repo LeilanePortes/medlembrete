@@ -168,67 +168,125 @@ class NotificationService {
       'Tome ${m.dosagem.isEmpty ? 'sua dose' : m.dosagem} e '
       'toque aqui para comprovar com uma foto.';
 
-  /// Agenda o lembrete para repetir todos os dias no horário do remédio.
-  Future<void> agendarLembreteDiario(Medicamento m) async {
+  /// Máximo de doses agendadas de uma vez para tratamentos com fim
+  /// (o iOS aceita até 64 pendentes). O app completa a lista sempre que
+  /// é aberto (ver [reagendarTodos]).
+  static const int maxDosesAgendadas = 60;
+
+  /// IDs das notificações de um remédio: cada dose agendada precisa de
+  /// um ID próprio. [n] vai de 0 a 199 (199 = notificação de teste).
+  static int idNotificacao(int medicamentoId, int n) =>
+      (medicamentoId * 200 + n) & 0x7fffffff;
+
+  static const int _nTeste = 199;
+
+  /// Agenda os lembretes do remédio conforme a agenda dele:
+  ///
+  /// - **Uso contínuo, todos os dias:** uma notificação por horário do dia,
+  ///   repetindo diariamente (`DateTimeComponents.time`).
+  /// - **Uso contínuo, alguns dias da semana:** uma por horário e por dia
+  ///   da semana, repetindo semanalmente (`dayOfWeekAndTime`).
+  /// - **Tratamento com fim (ex.: 7 dias):** cada dose é agendada uma a
+  ///   uma até o fim (até [maxDosesAgendadas] por vez).
+  Future<void> agendarLembretes(Medicamento m) async {
     if (!_inicializado) return;
-    await cancelar(m.id);
+    await cancelarLembretes(m.id);
     if (!m.ativo) return;
 
     if (kIsWeb) {
-      _agendarNaWeb(
-        id: m.id,
-        quando: proximoHorario(DateTime.now(), m.hora, m.minuto),
-        medicamento: m,
-        diario: true,
-      );
-      debugPrint('Lembrete agendado (web): ${m.nome} às ${m.horario}');
+      _agendarProximaNaWeb(m);
       return;
     }
 
-    final agora = tz.TZDateTime.now(tz.local);
-    var horario = tz.TZDateTime(
-      tz.local,
-      agora.year,
-      agora.month,
-      agora.day,
-      m.hora,
-      m.minuto,
-    );
-    if (!horario.isAfter(agora)) {
-      horario = horario.add(const Duration(days: 1));
+    final agora = DateTime.now();
+    final modo = await _modoAgendamento();
+    final payload = '$prefixoDose${m.id}';
+
+    Future<void> agendar(int n, DateTime quando, DateTimeComponents? repetir) =>
+        _plugin.zonedSchedule(
+          id: idNotificacao(m.id, n),
+          title: _titulo(m),
+          body: _corpo(m),
+          scheduledDate: tz.TZDateTime.from(quando, tz.local),
+          notificationDetails: _detalhes,
+          androidScheduleMode: modo,
+          matchDateTimeComponents: repetir,
+          payload: payload,
+        );
+
+    if (!m.continuo) {
+      final doses = m
+          .ocorrenciasEntre(agora, m.fim!)
+          .take(maxDosesAgendadas)
+          .toList();
+      for (var i = 0; i < doses.length; i++) {
+        await agendar(100 + i, doses[i], null);
+      }
+      debugPrint('Lembretes agendados: ${m.nome} (${doses.length} doses)');
+      return;
     }
 
-    await _plugin.zonedSchedule(
-      id: m.id,
-      title: _titulo(m),
-      body: _corpo(m),
-      scheduledDate: horario,
-      notificationDetails: _detalhes,
-      androidScheduleMode: await _modoAgendamento(),
-      // Repete diariamente comparando apenas hora e minuto.
-      matchDateTimeComponents: DateTimeComponents.time,
-      payload: '$prefixoDose${m.id}',
-    );
-    debugPrint('Lembrete agendado: ${m.nome} às ${m.horario}');
+    // Uso contínuo: a 1ª ocorrência de cada horário (e dia da semana)
+    // é agendada com repetição; o sistema repete sozinho depois.
+    final minutos = m.minutosDoDia;
+    final dias = m.todaSemana ? const [0] : (m.diasSemana.toList()..sort());
+    for (var s = 0; s < minutos.length; s++) {
+      for (final dia in dias) {
+        final primeira = _primeiraOcorrencia(m, minutos[s], dia, agora);
+        if (primeira == null) continue;
+        await agendar(
+          s * 8 + dia,
+          primeira,
+          dia == 0
+              ? DateTimeComponents.time
+              : DateTimeComponents.dayOfWeekAndTime,
+        );
+      }
+    }
+    debugPrint('Lembretes agendados: ${m.nome} ${m.horariosDoDia} '
+        '(${m.descricaoDias})');
   }
 
-  /// Agenda um lembrete único daqui a [atraso] — útil para demonstrar
-  /// o recurso na apresentação sem esperar o horário real.
+  /// Primeira dose de [m] no minuto do dia [minutoDoDia] (e no dia da
+  /// semana [diaSemana], se diferente de 0) depois de [agora].
+  static DateTime? _primeiraOcorrencia(
+      Medicamento m, int minutoDoDia, int diaSemana, DateTime agora) {
+    final proximas = m.ocorrenciasEntre(
+      agora.add(const Duration(microseconds: 1)),
+      DateTime(agora.year, agora.month, agora.day + 8),
+    );
+    final inicio = m.inicio;
+    // Se o tratamento ainda não começou, procura a partir do início.
+    final lista = (inicio != null && inicio.isAfter(agora))
+        ? m.ocorrenciasEntre(
+            inicio, DateTime(inicio.year, inicio.month, inicio.day + 8))
+        : proximas;
+    for (final t in lista) {
+      if (t.hour * 60 + t.minute != minutoDoDia) continue;
+      if (diaSemana != 0 && t.weekday != diaSemana) continue;
+      return t;
+    }
+    return null;
+  }
+
+  /// Agenda um lembrete único daqui a [atraso], útil para testar o
+  /// recurso sem esperar o horário real.
   Future<void> agendarTeste(
     Medicamento m, {
     Duration atraso = const Duration(seconds: 10),
   }) async {
     if (!_inicializado) return;
+    final id = idNotificacao(m.id, _nTeste);
     if (kIsWeb) {
-      _agendarNaWeb(
-        id: m.id + 1,
-        quando: DateTime.now().add(atraso),
-        medicamento: m,
-      );
+      _timersWeb.remove(id)?.cancel();
+      _timersWeb[id] = Timer(atraso, () {
+        _timersWeb.remove(id);
+        _mostrarLembrete(id, m);
+      });
       return;
     }
     await _plugin.zonedSchedule(
-      id: m.id + 1, // não sobrescreve o lembrete diário
+      id: id,
       title: _titulo(m),
       body: _corpo(m),
       scheduledDate: tz.TZDateTime.now(tz.local).add(atraso),
@@ -260,52 +318,58 @@ class NotificationService {
     }
   }
 
-  Future<void> cancelar(int id) async {
-    if (!_inicializado) return;
-    _timersWeb.remove(id)?.cancel();
-    await _plugin.cancel(id: id);
-  }
-
-  /// Web: agenda a notificação com um Timer. Se [diario], ao disparar
-  /// já agenda a do dia seguinte.
-  void _agendarNaWeb({
-    required int id,
-    required DateTime quando,
-    required Medicamento medicamento,
-    bool diario = false,
-  }) {
-    _timersWeb.remove(id)?.cancel();
-    final espera = quando.difference(DateTime.now());
-    _timersWeb[id] = Timer(espera.isNegative ? Duration.zero : espera, () {
-      _timersWeb.remove(id);
-      mostrarAgora(
+  Future<void> _mostrarLembrete(int id, Medicamento m) => mostrarAgora(
         id: id,
-        titulo: _titulo(medicamento),
-        corpo: _corpo(medicamento),
-        payload: '$prefixoDose${medicamento.id}',
+        titulo: _titulo(m),
+        corpo: _corpo(m),
+        payload: '$prefixoDose${m.id}',
       );
-      if (diario) {
-        _agendarNaWeb(
-          id: id,
-          quando: quando.add(const Duration(days: 1)),
-          medicamento: medicamento,
-          diario: true,
-        );
+
+  /// Cancela todos os lembretes agendados de um remédio
+  /// (exceto a notificação de teste).
+  Future<void> cancelarLembretes(int medicamentoId) async {
+    if (!_inicializado) return;
+    if (kIsWeb) {
+      _timersWeb.remove(idNotificacao(medicamentoId, 0))?.cancel();
+      return;
+    }
+    final teste = idNotificacao(medicamentoId, _nTeste);
+    for (final p in await _plugin.pendingNotificationRequests()) {
+      if (idDoPayload(p.payload) == medicamentoId && p.id != teste) {
+        await _plugin.cancel(id: p.id);
       }
-    });
+    }
   }
 
-  /// Próxima ocorrência de [hora]:[minuto] a partir de [agora]
-  /// (hoje, se ainda não passou; senão amanhã).
-  static DateTime proximoHorario(DateTime agora, int hora, int minuto) {
-    final hoje = DateTime(agora.year, agora.month, agora.day, hora, minuto);
-    return hoje.isAfter(agora) ? hoje : hoje.add(const Duration(days: 1));
+  /// O `setTimeout` do navegador estoura com esperas acima de ~24 dias.
+  static const Duration _esperaMaximaWeb = Duration(days: 20);
+
+  /// Web: agenda só a PRÓXIMA dose com um Timer; quando ela dispara,
+  /// agenda a seguinte.
+  void _agendarProximaNaWeb(Medicamento m) {
+    final id = idNotificacao(m.id, 0);
+    _timersWeb.remove(id)?.cancel();
+    final agora = DateTime.now();
+    final proxima = m.proximaOcorrencia(agora);
+    if (proxima == null) return; // tratamento terminou
+
+    final espera = proxima.difference(agora);
+    if (espera > _esperaMaximaWeb) {
+      // Tratamento que começa daqui a muito tempo: confere de novo depois.
+      _timersWeb[id] = Timer(_esperaMaximaWeb, () => _agendarProximaNaWeb(m));
+      return;
+    }
+    _timersWeb[id] = Timer(espera, () {
+      _mostrarLembrete(id, m);
+      _agendarProximaNaWeb(m);
+    });
+    debugPrint('Próximo lembrete (web): ${m.nome} em ${proxima.toLocal()}');
   }
 
   /// Reagenda todos os lembretes (chamado ao abrir o app).
   Future<void> reagendarTodos(Iterable<Medicamento> medicamentos) async {
     for (final m in medicamentos) {
-      await agendarLembreteDiario(m);
+      await agendarLembretes(m);
     }
   }
 

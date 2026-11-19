@@ -84,15 +84,14 @@ void main() {
     });
   });
 
-  group('NotificationService.proximoHorario (agendamento na web)', () {
-    test('horário que ainda não passou fica para hoje', () {
-      expect(NotificationService.proximoHorario(inicio, 14, 30),
-          DateTime(2026, 11, 18, 14, 30));
-    });
-
-    test('horário que já passou vai para amanhã', () {
-      expect(NotificationService.proximoHorario(inicio, 8, 0),
-          DateTime(2026, 11, 19, 8, 0));
+  group('NotificationService.idNotificacao', () {
+    test('cada dose de um remédio tem um ID diferente', () {
+      final ids = {
+        for (var n = 0; n < 200; n++)
+          NotificationService.idNotificacao(1763469000, n),
+      };
+      expect(ids, hasLength(200));
+      expect(ids.every((id) => id >= 0 && id <= 0x7fffffff), isTrue);
     });
   });
 }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/dose_agendada.dart';
 import '../models/medicamento.dart';
 
 /// Guarda a lista de remédios no armazenamento local (SharedPreferences)
@@ -67,13 +68,15 @@ class MedicamentoRepository extends ChangeNotifier {
     await _persistir();
   }
 
-  /// Remédio ativo cujo horário acontece primeiro a partir de agora.
-  Medicamento? proximaDose([DateTime? agora]) {
-    final ativos = _itens.where((m) => m.ativo).toList();
-    if (ativos.isEmpty) return null;
-    ativos.sort(
-      (a, b) => a.proximaOcorrencia(agora).compareTo(b.proximaOcorrencia(agora)),
-    );
-    return ativos.first;
+  /// Próxima dose (remédio + horário) entre os remédios ativos.
+  DoseAgendada? proximaDose([DateTime? agora]) {
+    DoseAgendada? proxima;
+    for (final m in _itens.where((m) => m.ativo)) {
+      final t = m.proximaOcorrencia(agora);
+      if (t != null && (proxima == null || t.isBefore(proxima.horario))) {
+        proxima = DoseAgendada(m, t);
+      }
+    }
+    return proxima;
   }
 }
