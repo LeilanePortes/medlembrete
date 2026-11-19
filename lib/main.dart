@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'app.dart';
 import 'services/dose_repository.dart';
+import 'services/location_service.dart';
 import 'services/medicamento_repository.dart';
 import 'services/notification_service.dart';
 
@@ -12,6 +13,7 @@ Future<void> main() async {
   final repositorio = MedicamentoRepository.instance;
   await repositorio.carregar();
   await DoseRepository.instance.carregar();
+  await LocationService.instance.carregarCasa();
 
   final notificacoes = NotificationService.instance;
   await notificacoes.inicializar();

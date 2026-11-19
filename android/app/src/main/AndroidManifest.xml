@@ -8,6 +8,11 @@
     <!-- Disparar o lembrete no horario exato (Android 12+) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
 
+    <!-- ===== Localizacao / GPS (Sprint 3) ===== -->
+    <!-- Precisa ser pedida em tempo de execucao (Geolocator.requestPermission) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
     <application
         android:label="MedLembrete"
         android:name="${applicationName}"
