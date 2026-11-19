@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Internet: carregar o mapa do OpenStreetMap (Sprint 5) -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <!-- ===== Notificacoes (Sprint 1) ===== -->
     <!-- Exibir notificacoes (pedida em tempo de execucao no Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>

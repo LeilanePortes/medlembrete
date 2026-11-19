@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import '../../core/formatters.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/location_service.dart';
+import '../../widgets/mapa_local.dart';
 
 /// Mostra latitude/longitude atuais e se o usuário está em casa ou fora.
 class LocalizacaoScreen extends StatefulWidget {
@@ -71,6 +72,13 @@ class _LocalizacaoScreenState extends State<LocalizacaoScreen> {
               _CartaoCasa(
                 posicao: leitura.posicao!,
                 onDefinirCasa: () => _definirCasa(leitura.posicao!),
+              ),
+              const SizedBox(height: 12),
+              // Desafio extra: mapa com a localização atual e o raio da casa.
+              MapaLocal(
+                latitude: leitura.posicao!.latitude,
+                longitude: leitura.posicao!.longitude,
+                casa: _servico.casa,
               ),
             ],
             const SizedBox(height: 24),

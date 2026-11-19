@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_constants.dart';
 import '../../widgets/feature_card.dart';
 import '../../widgets/proxima_dose_card.dart';
+import '../../widgets/status_hoje_card.dart';
 import '../dose/dose_screen.dart';
 
 /// Tela inicial: apresenta o app e dá atalhos para cada funcionalidade.
@@ -57,6 +58,8 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           ProximaDoseCard(onTap: () => onNavegar(1)),
+          const SizedBox(height: 12),
+          const StatusHojeCard(),
           const SizedBox(height: 24),
           Text('Funcionalidades',
               style: Theme.of(context).textTheme.titleMedium),
