@@ -72,5 +72,7 @@
 	<string>A galeria pode ser usada para escolher a foto de comprovação da dose.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>A localização é usada para registrar se você tomou o remédio em casa ou fora.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>O acelerômetro indica se o celular está parado (possivelmente esquecido) ou em movimento.</string>
 </dict>
 </plist>

@@ -4,6 +4,7 @@ import 'app.dart';
 import 'services/dose_repository.dart';
 import 'services/location_service.dart';
 import 'services/medicamento_repository.dart';
+import 'services/movimento_service.dart';
 import 'services/notification_service.dart';
 
 Future<void> main() async {
@@ -18,6 +19,9 @@ Future<void> main() async {
   final notificacoes = NotificationService.instance;
   await notificacoes.inicializar();
   await notificacoes.reagendarTodos(repositorio.medicamentos);
+
+  // Começa a ler o acelerômetro (X, Y, Z) enquanto o app estiver aberto.
+  MovimentoService.instance.iniciar();
 
   runApp(const MedLembreteApp());
 }
