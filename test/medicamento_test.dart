@@ -71,7 +71,9 @@ void main() {
       await repo.salvar(const Medicamento(
           id: 3, nome: 'Omeprazol', dosagem: '', hora: 10, minuto: 0));
 
-      expect(repo.proximaDose(DateTime(2026, 11, 18, 7))?.nome, 'Omeprazol');
+      final proxima = repo.proximaDose(DateTime(2026, 11, 18, 7));
+      expect(proxima?.medicamento.nome, 'Omeprazol');
+      expect(proxima?.horario, DateTime(2026, 11, 18, 10));
     });
   });
 }

@@ -7,6 +7,7 @@ import '../../models/medicamento.dart';
 import '../../services/dose_repository.dart';
 import '../../services/medicamento_repository.dart';
 import '../../services/notification_service.dart';
+import '../../services/resumo_doses.dart';
 import '../../widgets/placeholder_view.dart';
 import '../dose/dose_screen.dart';
 import 'medicamento_form_screen.dart';
@@ -52,7 +53,7 @@ class MedicamentosScreen extends StatelessWidget {
   Future<void> _alternarAtivo(Medicamento m, bool ativo) async {
     final atualizado = m.copyWith(ativo: ativo);
     await MedicamentoRepository.instance.salvar(atualizado);
-    await NotificationService.instance.agendarLembreteDiario(atualizado);
+    await NotificationService.instance.agendarLembretes(atualizado);
   }
 
   Future<void> _excluir(BuildContext context, Medicamento m) async {
@@ -60,7 +61,7 @@ class MedicamentosScreen extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Excluir remédio?'),
-        content: Text('O lembrete de ${m.nome} será cancelado.'),
+        content: Text('Os lembretes de ${m.nome} serão cancelados.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -74,7 +75,7 @@ class MedicamentosScreen extends StatelessWidget {
       ),
     );
     if (confirmar != true) return;
-    await NotificationService.instance.cancelar(m.id);
+    await NotificationService.instance.cancelarLembretes(m.id);
     await MedicamentoRepository.instance.remover(m.id);
   }
 
@@ -141,6 +142,31 @@ class MedicamentosScreen extends StatelessWidget {
   }
 }
 
+/// "Começa hoje às 22:00 · por 7 dias", "Até 25/11 (faltam 3 dias)",
+/// "Tratamento concluído" ou null (uso contínuo já iniciado).
+String? _situacao(Medicamento m, DateTime agora) {
+  final inicio = m.inicio;
+  if (inicio != null && inicio.isAfter(agora)) {
+    final quando = mesmoDia(inicio, agora)
+        ? 'hoje às ${formatarHora(inicio)}'
+        : 'em ${formatarData(inicio).substring(0, 5)}';
+    final duracao = m.continuo
+        ? ''
+        : ' · por ${m.duracaoDias} dia${m.duracaoDias == 1 ? '' : 's'}';
+    return 'Começa $quando$duracao';
+  }
+  if (m.continuo) return null;
+  if (m.encerrado(agora)) return 'Tratamento concluído';
+  final ultima = m.ultimaOcorrencia!;
+  final hoje = DateTime(agora.year, agora.month, agora.day);
+  final faltam =
+      DateTime(ultima.year, ultima.month, ultima.day).difference(hoje).inDays;
+  final quando = faltam == 0
+      ? 'termina hoje'
+      : 'falta${faltam == 1 ? '' : 'm'} $faltam dia${faltam == 1 ? '' : 's'}';
+  return 'Até ${formatarData(ultima).substring(0, 5)} ($quando)';
+}
+
 class _MedicamentoTile extends StatelessWidget {
   const _MedicamentoTile({
     required this.medicamento,
@@ -160,7 +186,13 @@ class _MedicamentoTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final m = medicamento;
-    final tomadaHoje = DoseRepository.instance.tomadaHoje(m.id);
+    final agora = DateTime.now();
+    final hojeDoRemedio = ResumoDoses.agendaDoDia(agora)
+        .where((d) => d.medicamento.id == m.id)
+        .toList();
+    final tomadasHoje = hojeDoRemedio.where((d) => d.tomada).length;
+    final tomadaHoje = DoseRepository.instance.tomadaHoje(m.id, agora);
+    final situacao = _situacao(m, agora);
 
     return Card(
       child: Padding(
@@ -188,7 +220,28 @@ class _MedicamentoTile extends StatelessWidget {
                       if (m.dosagem.isNotEmpty)
                         Text(m.dosagem,
                             style: TextStyle(color: scheme.onSurfaceVariant)),
-                      if (tomadaHoje != null)
+                      Text(
+                        m.intervaloHoras == 24
+                            ? m.descricaoDias
+                            : '${m.descricaoFrequencia}: '
+                                '${m.horariosDoDia.join(', ')}'
+                                '${m.todaSemana ? '' : ' · ${m.descricaoDias}'}',
+                        style: TextStyle(color: scheme.onSurfaceVariant),
+                      ),
+                      if (situacao != null)
+                        Text(situacao,
+                            style: TextStyle(
+                                color: scheme.primary,
+                                fontWeight: FontWeight.w600)),
+                      if (hojeDoRemedio.length > 1 && tomadasHoje > 0)
+                        Text(
+                          '✅ Hoje: $tomadasHoje de ${hojeDoRemedio.length} doses',
+                          style: const TextStyle(
+                            color: AppTheme.sucesso,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        )
+                      else if (tomadaHoje != null)
                         Text(
                           '✅ Tomado hoje às ${formatarHora(tomadaHoje.dataHora)}',
                           style: const TextStyle(

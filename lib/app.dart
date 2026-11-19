@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/app_constants.dart';
 import 'core/theme/app_theme.dart';
@@ -19,6 +20,10 @@ class MedLembreteApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
+      // Calendário, relógio e botões padrão (OK/Cancelar) em português.
+      locale: const Locale('pt', 'BR'),
+      supportedLocales: const [Locale('pt', 'BR')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       home: const MainShell(),
     );
   }

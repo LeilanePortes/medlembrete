@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/formatters.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/dose.dart';
 import '../../models/medicamento.dart';
@@ -11,6 +12,7 @@ import '../../services/dose_repository.dart';
 import '../../services/location_service.dart';
 import '../../services/medicamento_repository.dart';
 import '../../services/movimento_service.dart';
+import '../../services/resumo_doses.dart';
 
 /// Abre a comprovação de dose: se houver mais de um remédio,
 /// pergunta qual está sendo tomado.
@@ -44,7 +46,8 @@ Future<void> abrirComprovacao(BuildContext context) async {
                     leading: const Icon(Icons.medication),
                     title: Text(m.nome),
                     subtitle: Text(m.dosagem),
-                    trailing: Text(m.horario),
+                    trailing: Text(formatarHora(
+                        ResumoDoses.doseParaComprovar(m))),
                     onTap: () => Navigator.pop(context, m),
                   ),
               ],
@@ -79,6 +82,10 @@ class _DoseScreenState extends State<DoseScreen> {
 
   LeituraGps? _gps;
   bool _lendoGps = false;
+
+  /// Qual dose da agenda está sendo comprovada (ex.: hoje às 16:00).
+  late final DateTime _previsto =
+      ResumoDoses.doseParaComprovar(widget.medicamento);
 
   @override
   void initState() {
@@ -137,7 +144,8 @@ class _DoseScreenState extends State<DoseScreen> {
           medicamentoId: m.id,
           nomeMedicamento: m.nome,
           dosagem: m.dosagem,
-          horarioPrevisto: m.horario,
+          horarioPrevisto: formatarHora(_previsto),
+          previstoPara: _previsto,
           dataHora: agora,
           fotoPath: caminho,
           latitude: posicao?.latitude,
@@ -215,7 +223,9 @@ class _DoseScreenState extends State<DoseScreen> {
                         ),
                       ),
                       Text(
-                        '${m.dosagem.isEmpty ? 'Dose' : m.dosagem} • ${m.horario}',
+                        '${m.dosagem.isEmpty ? 'Dose' : m.dosagem} • '
+                        '${mesmoDia(_previsto, DateTime.now()) ? '' : '${formatarData(_previsto).substring(0, 5)} '}'
+                        '${formatarHora(_previsto)}',
                         style: TextStyle(color: scheme.onPrimaryContainer),
                       ),
                     ],
