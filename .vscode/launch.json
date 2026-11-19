@@ -6,7 +6,8 @@
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
-      "deviceId": "chrome"
+      "deviceId": "chrome",
+      "toolArgs": ["--web-port", "8080"]
     },
     {
       "name": "MedLembrete (servidor: localhost:8080)",
@@ -14,7 +15,7 @@
       "type": "dart",
       "program": "lib/main.dart",
       "deviceId": "web-server",
-      "args": ["--web-port", "8080"]
+      "toolArgs": ["--web-port", "8080"]
     }
   ]
 }

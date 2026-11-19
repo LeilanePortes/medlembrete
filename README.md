@@ -25,10 +25,12 @@ Pré-requisitos: Flutter 3.47+ (Dart 3.13+) e Google Chrome. **Não precisa de A
 
 ```bash
 flutter pub get
-flutter run -d chrome
+flutter run -d chrome --web-port 8080
 ```
 
-No VS Code: escolha **Chrome** como dispositivo na barra inferior e aperte **F5** (ou use a configuração *"MedLembrete (Chrome)"* em `.vscode/launch.json`).
+No VS Code: abra **Executar e Depurar** (`Ctrl+Shift+D`), escolha *"MedLembrete (Chrome)"* na lista do topo e aperte **F5**. As duas configurações de `.vscode/launch.json` já usam a porta 8080.
+
+> **Por que fixar a porta?** O navegador guarda os dados do app (remédios, histórico, permissões) separados **por endereço, incluindo a porta**. Sem `--web-port`, o Flutter sorteia uma porta a cada execução (ex.: `localhost:60595`) e o app parece "perder" tudo.
 
 #### Modo servidor (recomendado para testar as notificações)
 
@@ -38,7 +40,7 @@ flutter run -d web-server --web-port 8080
 
 Depois abra **http://localhost:8080** no seu Chrome normal (no VS Code: configuração *"MedLembrete (servidor: localhost:8080)"*).
 
-> No `-d chrome` o Flutter abre um Chrome "de depuração" em que **clicar na notificação não abre o app** (limitação do plugin) e as permissões são esquecidas a cada execução. No modo servidor as duas coisas funcionam normalmente.
+> No `-d chrome` o Flutter abre um Chrome "de depuração", com um perfil temporário: **clicar na notificação não abre o app** (limitação do plugin) e os dados e permissões são apagados a cada execução. No modo servidor, usando o seu Chrome normal, as duas coisas funcionam e os dados ficam salvos.
 
 Como cada recurso funciona no navegador:
 
