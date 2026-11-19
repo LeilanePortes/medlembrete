@@ -4,6 +4,7 @@ import '../../core/theme/app_theme.dart';
 import '../../services/alerta_esquecido_service.dart';
 import '../../services/detector_movimento.dart';
 import '../../services/movimento_service.dart';
+import '../../services/simulador_acelerometro.dart';
 import '../../widgets/grafico_acelerometro.dart';
 
 /// Valores X, Y e Z do acelerômetro em tempo real e o estado do celular.
@@ -31,18 +32,14 @@ class MovimentoScreen extends StatelessWidget {
       body: ListenableBuilder(
         listenable: servico,
         builder: (context, _) {
-          if (servico.erro != null) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Text(servico.erro!, textAlign: TextAlign.center),
-              ),
-            );
-          }
           final leitura = servico.ultima;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              if (servico.semSensor || servico.simulando) ...[
+                _CartaoSimulacao(servico: servico),
+                const SizedBox(height: 12),
+              ],
               _CartaoEstado(servico: servico),
               const SizedBox(height: 12),
               Card(
@@ -51,8 +48,12 @@ class MovimentoScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Acelerômetro (m/s²)',
-                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      Text(
+                        servico.simulando
+                            ? 'Acelerômetro (m/s²) — simulado'
+                            : 'Acelerômetro (m/s²)',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       const SizedBox(height: 12),
                       _LinhaEixo('X', leitura?.x, CoresEixo.x),
                       _LinhaEixo('Y', leitura?.y, CoresEixo.y),
@@ -77,8 +78,10 @@ class MovimentoScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Últimos segundos',
-                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const Text(
+                        'Últimos segundos',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       const SizedBox(height: 12),
                       GraficoAcelerometro(leituras: servico.historico),
                     ],
@@ -92,14 +95,20 @@ class MovimentoScreen extends StatelessWidget {
                 child: ListTile(
                   leading: const Icon(Icons.vibration),
                   title: const Text('Movimentos bruscos detectados'),
-                  subtitle: const Text('Chacoalhe o celular para testar'),
+                  subtitle: Text(
+                    servico.simulando
+                        ? 'Use o botão "Chacoalhar" da simulação'
+                        : 'Chacoalhe o celular para testar',
+                  ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         '${servico.movimentosBruscos}',
                         style: const TextStyle(
-                            fontSize: 24, fontWeight: FontWeight.w700),
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       IconButton(
                         tooltip: 'Zerar',
@@ -118,6 +127,76 @@ class MovimentoScreen extends StatelessWidget {
   }
 }
 
+/// Modo simulação: usado quando o dispositivo não tem acelerômetro
+/// (ex.: Chrome no computador). Os valores gerados passam pelo mesmo
+/// detector de movimento das leituras reais.
+class _CartaoSimulacao extends StatelessWidget {
+  const _CartaoSimulacao({required this.servico});
+
+  final MovimentoService servico;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      color: scheme.tertiaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 4, 0, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SwitchListTile(
+              secondary: const Icon(Icons.science_outlined),
+              title: const Text('Modo simulação'),
+              subtitle: Text(
+                servico.semSensor
+                    ? 'Este dispositivo não tem acelerômetro (ex.: Chrome no '
+                          'computador). Os valores X, Y, Z são gerados pelo app.'
+                    : 'Gera valores X, Y, Z artificiais para teste.',
+              ),
+              value: servico.simulando,
+              onChanged: servico.definirSimulacao,
+            ),
+            if (servico.simulando)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    SegmentedButton<ModoSimulacao>(
+                      segments: const [
+                        ButtonSegment(
+                          value: ModoSimulacao.mesa,
+                          icon: Icon(Icons.table_restaurant_outlined),
+                          label: Text('Na mesa'),
+                        ),
+                        ButtonSegment(
+                          value: ModoSimulacao.andando,
+                          icon: Icon(Icons.directions_walk),
+                          label: Text('Andando'),
+                        ),
+                      ],
+                      selected: {servico.simulador.modo},
+                      onSelectionChanged: (s) =>
+                          servico.definirModoSimulacao(s.first),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: servico.ativo ? servico.chacoalhar : null,
+                      icon: const Icon(Icons.vibration),
+                      label: const Text('Chacoalhar'),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _CartaoEstado extends StatelessWidget {
   const _CartaoEstado({required this.servico});
 
@@ -127,21 +206,21 @@ class _CartaoEstado extends StatelessWidget {
   Widget build(BuildContext context) {
     final (icone, cor, dica) = switch (servico.estado) {
       EstadoMovimento.emMovimento => (
-          Icons.directions_walk,
-          AppTheme.sucesso,
-          'O celular está sendo usado ou carregado.',
-        ),
+        Icons.directions_walk,
+        AppTheme.sucesso,
+        'O celular está sendo usado ou carregado.',
+      ),
       EstadoMovimento.parado => (
-          Icons.phone_android,
-          AppTheme.alerta,
-          'Parado há ${servico.tempoParado.inSeconds} s.',
-        ),
+        Icons.phone_android,
+        AppTheme.alerta,
+        'Parado há ${servico.tempoParado.inSeconds} s.',
+      ),
       EstadoMovimento.esquecido => (
-          Icons.phonelink_erase,
-          AppTheme.perigo,
-          'Parado há ${servico.tempoParado.inSeconds} s — '
-              'o celular pode ter sido esquecido!',
-        ),
+        Icons.phonelink_erase,
+        AppTheme.perigo,
+        'Parado há ${servico.tempoParado.inSeconds} s — '
+            'o celular pode ter sido esquecido!',
+      ),
     };
 
     return Card(
@@ -199,9 +278,14 @@ class _LinhaEixo extends StatelessWidget {
         children: [
           SizedBox(
             width: 28,
-            child: Text(eixo,
-                style: TextStyle(
-                    color: cor, fontSize: 20, fontWeight: FontWeight.w800)),
+            child: Text(
+              eixo,
+              style: TextStyle(
+                color: cor,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
           SizedBox(
             width: 92,

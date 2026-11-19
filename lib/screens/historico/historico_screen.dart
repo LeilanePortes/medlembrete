@@ -1,11 +1,10 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../core/formatters.dart';
 import '../../models/dose.dart';
 import '../../services/detector_movimento.dart';
 import '../../services/dose_repository.dart';
+import '../../widgets/foto_comprovante.dart';
 import '../../widgets/placeholder_view.dart';
 import 'dose_detalhe_screen.dart';
 
@@ -64,18 +63,11 @@ class _DoseTile extends StatelessWidget {
           children: [
             Hero(
               tag: 'foto-${dose.id}',
-              child: Image.file(
-                File(dose.fotoPath),
+              child: FotoComprovante(
+                referencia: dose.fotoPath,
                 width: 96,
                 height: 120,
-                fit: BoxFit.cover,
                 cacheWidth: 200,
-                errorBuilder: (_, _, _) => Container(
-                  width: 96,
-                  height: 120,
-                  color: scheme.surfaceContainerHighest,
-                  child: const Icon(Icons.broken_image_outlined),
-                ),
               ),
             ),
             const SizedBox(width: 16),

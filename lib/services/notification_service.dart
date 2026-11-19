@@ -10,6 +10,11 @@ import '../models/medicamento.dart';
 
 /// Centraliza tudo o que envolve notificações locais:
 /// inicialização, permissões, agendamento diário e toques do usuário.
+///
+/// No navegador (Chrome) o plugin não agenda notificações futuras
+/// (`zonedSchedule` não existe na web). Por isso, na web, o agendamento é
+/// feito com um [Timer] do próprio app: a notificação aparece no horário
+/// enquanto a aba do MedLembrete estiver aberta (pode estar minimizada).
 class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();
@@ -37,7 +42,12 @@ class NotificationService {
       presentBanner: true,
       presentSound: true,
     ),
+    // Na web, a notificação fica na tela até o usuário interagir.
+    web: WebNotificationDetails(requireInteraction: true),
   );
+
+  /// Lembretes agendados na web (id da notificação -> timer).
+  final Map<int, Timer> _timersWeb = {};
 
   final StreamController<String?> _toques =
       StreamController<String?>.broadcast();
@@ -71,6 +81,7 @@ class NotificationService {
         requestBadgePermission: false,
         requestSoundPermission: false,
       ),
+      web: WebInitializationSettings(),
     );
     await _plugin.initialize(
       settings: settings,
@@ -87,18 +98,43 @@ class NotificationService {
     _inicializado = true;
   }
 
-  AndroidFlutterLocalNotificationsPlugin? get _android =>
-      _plugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
+  AndroidFlutterLocalNotificationsPlugin? get _android => _plugin
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >();
 
-  IOSFlutterLocalNotificationsPlugin? get _ios =>
-      _plugin.resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin>();
+  IOSFlutterLocalNotificationsPlugin? get _ios => _plugin
+      .resolvePlatformSpecificImplementation<
+        IOSFlutterLocalNotificationsPlugin
+      >();
+
+  WebFlutterLocalNotificationsPlugin? get _web => kIsWeb
+      ? _plugin
+            .resolvePlatformSpecificImplementation<
+              WebFlutterLocalNotificationsPlugin
+            >()
+      : null;
+
+  /// Na web, o navegador só deixa pedir a permissão a partir de um
+  /// clique do usuário. Este getter diz se ainda falta pedir.
+  bool get precisaPermissaoWeb =>
+      _web != null &&
+      _web!.permissionStatus != WebNotificationPermission.granted;
+
+  /// true se o usuário bloqueou as notificações no navegador.
+  bool get bloqueadaNaWeb =>
+      _web?.permissionStatus == WebNotificationPermission.denied;
 
   /// Pede permissão para exibir notificações (Android 13+ e iOS)
   /// e para alarmes exatos (Android 12+), usados no horário certo do remédio.
+  ///
+  /// Na web, chame apenas a partir de um clique (botão).
   Future<bool> solicitarPermissoes() async {
     if (!_inicializado) return false;
+    final web = _web;
+    if (web != null) {
+      return await web.requestNotificationsPermission() ?? false;
+    }
     final android = _android;
     if (android != null) {
       final notificacoes = await android.requestNotificationsPermission();
@@ -138,9 +174,26 @@ class NotificationService {
     await cancelar(m.id);
     if (!m.ativo) return;
 
+    if (kIsWeb) {
+      _agendarNaWeb(
+        id: m.id,
+        quando: proximoHorario(DateTime.now(), m.hora, m.minuto),
+        medicamento: m,
+        diario: true,
+      );
+      debugPrint('Lembrete agendado (web): ${m.nome} às ${m.horario}');
+      return;
+    }
+
     final agora = tz.TZDateTime.now(tz.local);
     var horario = tz.TZDateTime(
-        tz.local, agora.year, agora.month, agora.day, m.hora, m.minuto);
+      tz.local,
+      agora.year,
+      agora.month,
+      agora.day,
+      m.hora,
+      m.minuto,
+    );
     if (!horario.isAfter(agora)) {
       horario = horario.add(const Duration(days: 1));
     }
@@ -161,9 +214,19 @@ class NotificationService {
 
   /// Agenda um lembrete único daqui a [atraso] — útil para demonstrar
   /// o recurso na apresentação sem esperar o horário real.
-  Future<void> agendarTeste(Medicamento m,
-      {Duration atraso = const Duration(seconds: 10)}) async {
+  Future<void> agendarTeste(
+    Medicamento m, {
+    Duration atraso = const Duration(seconds: 10),
+  }) async {
     if (!_inicializado) return;
+    if (kIsWeb) {
+      _agendarNaWeb(
+        id: m.id + 1,
+        quando: DateTime.now().add(atraso),
+        medicamento: m,
+      );
+      return;
+    }
     await _plugin.zonedSchedule(
       id: m.id + 1, // não sobrescreve o lembrete diário
       title: _titulo(m),
@@ -183,18 +246,60 @@ class NotificationService {
     String? payload,
   }) async {
     if (!_inicializado) return;
-    await _plugin.show(
-      id: id,
-      title: titulo,
-      body: corpo,
-      notificationDetails: _detalhes,
-      payload: payload,
-    );
+    try {
+      await _plugin.show(
+        id: id,
+        title: titulo,
+        body: corpo,
+        notificationDetails: _detalhes,
+        payload: payload,
+      );
+    } catch (e) {
+      // Na web, falha se o usuário ainda não permitiu as notificações.
+      debugPrint('Não foi possível mostrar a notificação: $e');
+    }
   }
 
   Future<void> cancelar(int id) async {
     if (!_inicializado) return;
+    _timersWeb.remove(id)?.cancel();
     await _plugin.cancel(id: id);
+  }
+
+  /// Web: agenda a notificação com um Timer. Se [diario], ao disparar
+  /// já agenda a do dia seguinte.
+  void _agendarNaWeb({
+    required int id,
+    required DateTime quando,
+    required Medicamento medicamento,
+    bool diario = false,
+  }) {
+    _timersWeb.remove(id)?.cancel();
+    final espera = quando.difference(DateTime.now());
+    _timersWeb[id] = Timer(espera.isNegative ? Duration.zero : espera, () {
+      _timersWeb.remove(id);
+      mostrarAgora(
+        id: id,
+        titulo: _titulo(medicamento),
+        corpo: _corpo(medicamento),
+        payload: '$prefixoDose${medicamento.id}',
+      );
+      if (diario) {
+        _agendarNaWeb(
+          id: id,
+          quando: quando.add(const Duration(days: 1)),
+          medicamento: medicamento,
+          diario: true,
+        );
+      }
+    });
+  }
+
+  /// Próxima ocorrência de [hora]:[minuto] a partir de [agora]
+  /// (hoje, se ainda não passou; senão amanhã).
+  static DateTime proximoHorario(DateTime agora, int hora, int minuto) {
+    final hoje = DateTime(agora.year, agora.month, agora.day, hora, minuto);
+    return hoje.isAfter(agora) ? hoje : hoje.add(const Duration(days: 1));
   }
 
   /// Reagenda todos os lembretes (chamado ao abrir o app).

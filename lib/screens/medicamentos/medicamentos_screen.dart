@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/formatters.dart';
@@ -23,13 +24,26 @@ class MedicamentosScreen extends StatelessWidget {
   }
 
   Future<void> _testarNotificacao(BuildContext context, Medicamento m) async {
-    await NotificationService.instance.agendarTeste(m);
+    final notificacoes = NotificationService.instance;
+    // Na web, aproveita o clique para pedir a permissão, se faltar.
+    if (notificacoes.precisaPermissaoWeb &&
+        !await notificacoes.solicitarPermissoes()) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Notificações bloqueadas. Clique no cadeado ao lado '
+              'do endereço do site e permita "Notificações".'),
+        ),
+      );
+      return;
+    }
+    await notificacoes.agendarTeste(m);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text(
           'Notificação de teste em 10 segundos. '
-          'Pode bloquear a tela ou sair do app!',
+          '${kIsWeb ? 'Pode minimizar o navegador, mas mantenha a aba aberta!' : 'Pode bloquear a tela ou sair do app!'}',
         ),
       ),
     );
@@ -82,7 +96,10 @@ class MedicamentosScreen extends StatelessWidget {
                 SnackBar(
                   content: Text(ok
                       ? 'Notificações permitidas ✅'
-                      : 'Notificações bloqueadas. Ative nas configurações.'),
+                      : kIsWeb
+                          ? 'Notificações bloqueadas. Clique no cadeado ao '
+                              'lado do endereço e permita "Notificações".'
+                          : 'Notificações bloqueadas. Ative nas configurações.'),
                 ),
               );
             },

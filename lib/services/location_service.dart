@@ -3,7 +3,13 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Situação da leitura do GPS.
-enum StatusGps { ok, servicoDesligado, permissaoNegada, permissaoNegadaSempre, erro }
+enum StatusGps {
+  ok,
+  servicoDesligado,
+  permissaoNegada,
+  permissaoNegadaSempre,
+  erro,
+}
 
 /// Resultado de uma tentativa de obter a localização.
 class LeituraGps {
@@ -75,7 +81,9 @@ class LocationService extends ChangeNotifier {
       if (!await Geolocator.isLocationServiceEnabled()) {
         return const LeituraGps(
           StatusGps.servicoDesligado,
-          mensagem: 'A localização do celular está desligada.',
+          mensagem: kIsWeb
+              ? 'Este navegador não oferece localização.'
+              : 'A localização do celular está desligada.',
         );
       }
 
@@ -93,8 +101,11 @@ class LocationService extends ChangeNotifier {
       if (permissao == LocationPermission.deniedForever) {
         return const LeituraGps(
           StatusGps.permissaoNegadaSempre,
-          mensagem: 'Permissão negada permanentemente. '
-              'Libere nas configurações do app.',
+          mensagem: kIsWeb
+              ? 'Localização bloqueada no navegador. Clique no cadeado ao '
+                    'lado do endereço do site e permita "Local".'
+              : 'Permissão negada permanentemente. '
+                    'Libere nas configurações do app.',
         );
       }
 
@@ -108,15 +119,28 @@ class LocationService extends ChangeNotifier {
         );
         return LeituraGps(StatusGps.ok, posicao: posicao);
       } catch (_) {
+        // O navegador não guarda a "última posição conhecida".
+        if (kIsWeb) rethrow;
         // Sem sinal a tempo (ex.: dentro de prédio): usa a última conhecida.
         final ultima = await Geolocator.getLastKnownPosition();
         if (ultima != null) return LeituraGps(StatusGps.ok, posicao: ultima);
         rethrow;
       }
     } catch (e) {
-      return LeituraGps(StatusGps.erro, mensagem: 'Erro ao ler o GPS: $e');
+      return LeituraGps(
+        StatusGps.erro,
+        mensagem: kIsWeb
+            ? 'O navegador não conseguiu a posição. No Windows, ative '
+                  'Configurações › Privacidade › Localização. Para simular, '
+                  'use F12 › menu ⋮ › More tools › Sensors › Location.\n($e)'
+            : 'Erro ao ler o GPS: $e',
+      );
     }
   }
+
+  /// No celular abre as configurações do sistema. No navegador não
+  /// existe essa tela: a permissão é liberada pelo cadeado do endereço.
+  static bool get podeAbrirConfiguracoes => !kIsWeb;
 
   Future<void> abrirConfiguracoes(StatusGps status) async {
     if (status == StatusGps.servicoDesligado) {
@@ -131,7 +155,11 @@ class LocationService extends ChangeNotifier {
     final c = _casa;
     if (c == null) return null;
     return Geolocator.distanceBetween(
-        latitude, longitude, c.latitude, c.longitude);
+      latitude,
+      longitude,
+      c.latitude,
+      c.longitude,
+    );
   }
 
   /// true = em casa, false = fora, null = casa não definida.

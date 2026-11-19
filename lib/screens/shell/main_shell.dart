@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/medicamento_repository.dart';
@@ -33,8 +34,14 @@ class _MainShellState extends State<MainShell> {
     _toques = notificacoes.toques.listen(_abrirPeloPayload);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Pede a permissão de notificação logo na primeira abertura.
-      await notificacoes.solicitarPermissoes();
+      if (kIsWeb) {
+        // No navegador a permissão só pode ser pedida após um clique:
+        // mostra um aviso com o botão "Permitir".
+        _mostrarAvisoPermissaoWeb();
+      } else {
+        // Pede a permissão de notificação logo na primeira abertura.
+        await notificacoes.solicitarPermissoes();
+      }
       // Se o app foi aberto pela notificação, vai direto para a dose.
       final payload = notificacoes.payloadDeAbertura;
       notificacoes.payloadDeAbertura = null;
@@ -46,6 +53,37 @@ class _MainShellState extends State<MainShell> {
   void dispose() {
     _toques?.cancel();
     super.dispose();
+  }
+
+  void _mostrarAvisoPermissaoWeb() {
+    final notificacoes = NotificationService.instance;
+    if (!mounted || !notificacoes.precisaPermissaoWeb) return;
+    final mensageiro = ScaffoldMessenger.of(context);
+    final bloqueada = notificacoes.bloqueadaNaWeb;
+    mensageiro.showMaterialBanner(
+      MaterialBanner(
+        leading: const Icon(Icons.notifications_active_outlined),
+        content: Text(bloqueada
+            ? 'As notificações estão bloqueadas neste navegador. Clique no '
+                'cadeado ao lado do endereço do site e permita "Notificações".'
+            : 'Permita as notificações para receber o aviso '
+                'na hora de cada remédio.'),
+        actions: [
+          TextButton(
+            onPressed: mensageiro.hideCurrentMaterialBanner,
+            child: const Text('Agora não'),
+          ),
+          if (!bloqueada)
+            FilledButton(
+              onPressed: () async {
+                mensageiro.hideCurrentMaterialBanner();
+                await notificacoes.solicitarPermissoes();
+              },
+              child: const Text('Permitir'),
+            ),
+        ],
+      ),
+    );
   }
 
   void _abrirPeloPayload(String? payload) {
