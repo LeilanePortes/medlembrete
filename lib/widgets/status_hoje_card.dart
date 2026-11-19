@@ -30,6 +30,9 @@ class StatusHojeCard extends StatelessWidget {
               builder: (context, _) {
                 final (tomadas, total) = ResumoDoses.progressoHoje();
                 final atrasadas = ResumoDoses.atrasadasHoje();
+                final acabando = MedicamentoRepository.instance.medicamentos
+                    .where((m) => m.ativo && m.estoqueBaixo)
+                    .toList();
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -55,6 +58,16 @@ class StatusHojeCard extends StatelessWidget {
                         minHeight: 10,
                       ),
                     ),
+                    if (acabando.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        '📦 Acabando: ${acabando.map((m) => '${m.nome} (${m.estoqueAcabou ? 'acabou' : m.descreverQuantidade(m.estoque!)})').join(', ')}',
+                        style: const TextStyle(
+                          color: AppTheme.alerta,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                     if (atrasadas.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(

@@ -9,6 +9,7 @@ import '../../models/medicamento.dart';
 import '../../services/camera_service.dart';
 import '../../services/detector_movimento.dart';
 import '../../services/dose_repository.dart';
+import '../../services/estoque_service.dart';
 import '../../services/location_service.dart';
 import '../../services/medicamento_repository.dart';
 import '../../services/movimento_service.dart';
@@ -136,8 +137,11 @@ class _DoseScreenState extends State<DoseScreen> {
     final local = LocationService.instance;
     final movimento = MovimentoService.instance;
 
+    int? descontado;
     try {
       final caminho = await CameraService.instance.salvarComprovante(foto);
+      // Estoque: desconta a dose (se o remédio controla estoque).
+      descontado = await EstoqueService.instance.descontarDose(m.id);
       await DoseRepository.instance.registrar(
         Dose(
           id: agora.millisecondsSinceEpoch,
@@ -146,6 +150,7 @@ class _DoseScreenState extends State<DoseScreen> {
           dosagem: m.dosagem,
           horarioPrevisto: formatarHora(_previsto),
           previstoPara: _previsto,
+          unidadesDescontadas: descontado,
           dataHora: agora,
           fotoPath: caminho,
           latitude: posicao?.latitude,
@@ -161,6 +166,10 @@ class _DoseScreenState extends State<DoseScreen> {
       );
     } catch (e) {
       // Ex.: armazenamento do navegador cheio (limite de ~5 MB).
+      // A dose não foi registrada: devolve o que foi descontado.
+      if (descontado != null) {
+        await EstoqueService.instance.devolver(m.id, descontado);
+      }
       if (!mounted) return;
       setState(() => _salvando = false);
       ScaffoldMessenger.of(context).showSnackBar(

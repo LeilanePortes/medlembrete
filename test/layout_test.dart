@@ -26,6 +26,7 @@ void main() {
         dataInicio: DateTime(hoje.year, hoje.month, hoje.day),
         intervaloHoras: 8,
         duracaoDias: 7,
+        estoque: 2, // baixo: mostra o aviso e a previsão
       ),
     );
     await MedicamentoRepository.instance.salvar(
