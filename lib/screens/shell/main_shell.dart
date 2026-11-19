@@ -1,11 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../services/medicamento_repository.dart';
+import '../../services/notification_service.dart';
+import '../dose/dose_screen.dart';
 import '../home/home_screen.dart';
 import '../localizacao/localizacao_screen.dart';
 import '../medicamentos/medicamentos_screen.dart';
 import '../movimento/movimento_screen.dart';
 
 /// Estrutura principal: barra de navegação inferior com as abas do app.
+///
+/// Também é responsável por reagir ao toque nas notificações,
+/// abrindo a tela "Hora do remédio".
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -15,6 +23,41 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _indice = 0;
+  StreamSubscription<String?>? _toques;
+
+  @override
+  void initState() {
+    super.initState();
+    final notificacoes = NotificationService.instance;
+    _toques = notificacoes.toques.listen(_abrirPeloPayload);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Pede a permissão de notificação logo na primeira abertura.
+      await notificacoes.solicitarPermissoes();
+      // Se o app foi aberto pela notificação, vai direto para a dose.
+      final payload = notificacoes.payloadDeAbertura;
+      notificacoes.payloadDeAbertura = null;
+      _abrirPeloPayload(payload);
+    });
+  }
+
+  @override
+  void dispose() {
+    _toques?.cancel();
+    super.dispose();
+  }
+
+  void _abrirPeloPayload(String? payload) {
+    final id = NotificationService.idDoPayload(payload);
+    if (id == null || !mounted) return;
+    final medicamento = MedicamentoRepository.instance.porId(id);
+    if (medicamento == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DoseScreen(medicamento: medicamento),
+      ),
+    );
+  }
 
   void _irPara(int indice) => setState(() => _indice = indice);
 
