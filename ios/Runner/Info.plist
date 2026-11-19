@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>A câmera é usada para fotografar a caixa ou o comprimido e comprovar que você tomou o remédio.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>A galeria pode ser usada para escolher a foto de comprovação da dose.</string>
 </dict>
 </plist>

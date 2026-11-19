@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_constants.dart';
 import '../../widgets/feature_card.dart';
 import '../../widgets/proxima_dose_card.dart';
+import '../dose/dose_screen.dart';
 
 /// Tela inicial: apresenta o app e dá atalhos para cada funcionalidade.
 class HomeScreen extends StatelessWidget {
@@ -79,23 +80,21 @@ class HomeScreen extends StatelessWidget {
                 titulo: 'Comprovação',
                 descricao: 'Foto da caixa ou do comprimido',
                 cor: Colors.deepPurple,
-                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Disponível na Sprint 2')),
-                ),
+                onTap: () => abrirComprovacao(context),
               ),
               FeatureCard(
                 icon: Icons.location_on,
                 titulo: 'Localização',
                 descricao: 'Em casa ou fora no momento da dose',
                 cor: Colors.orange,
-                onTap: () => onNavegar(2),
+                onTap: () => onNavegar(3),
               ),
               FeatureCard(
                 icon: Icons.sensors,
                 titulo: 'Movimento',
                 descricao: 'Celular parado (esquecido) ou em uso',
                 cor: Colors.blue,
-                onTap: () => onNavegar(3),
+                onTap: () => onNavegar(4),
               ),
             ],
           ),

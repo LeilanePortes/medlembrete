@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app.dart';
+import 'services/dose_repository.dart';
 import 'services/medicamento_repository.dart';
 import 'services/notification_service.dart';
 
@@ -10,6 +11,7 @@ Future<void> main() async {
   // Carrega os remédios salvos e prepara as notificações antes de abrir o app.
   final repositorio = MedicamentoRepository.instance;
   await repositorio.carregar();
+  await DoseRepository.instance.carregar();
 
   final notificacoes = NotificationService.instance;
   await notificacoes.inicializar();
