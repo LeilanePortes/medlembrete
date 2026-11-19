@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../services/alerta_esquecido_service.dart';
 import '../../services/detector_movimento.dart';
 import '../../services/movimento_service.dart';
 import '../../widgets/grafico_acelerometro.dart';
@@ -84,6 +85,8 @@ class MovimentoScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              const _CartaoAlerta(),
               const SizedBox(height: 12),
               Card(
                 child: ListTile(
@@ -225,6 +228,57 @@ class _LinhaEixo extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Configura a notificação de "celular esquecido" (desafio extra).
+class _CartaoAlerta extends StatelessWidget {
+  const _CartaoAlerta();
+
+  String _rotulo(int segundos) =>
+      segundos < 60 ? '$segundos s' : '${segundos ~/ 60} min';
+
+  @override
+  Widget build(BuildContext context) {
+    final alerta = AlertaEsquecidoService.instance;
+    return ListenableBuilder(
+      listenable: alerta,
+      builder: (context, _) => Card(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(0, 4, 0, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SwitchListTile(
+                secondary: const Icon(Icons.notifications_active_outlined),
+                title: const Text('Avisar se o celular for esquecido'),
+                subtitle: Text(
+                  'Notifica quando ficar parado por ${_rotulo(alerta.segundos)}',
+                ),
+                value: alerta.ativo,
+                onChanged: alerta.definirAtivo,
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final s in AlertaEsquecidoService.opcoesSegundos)
+                      ChoiceChip(
+                        label: Text(_rotulo(s)),
+                        selected: alerta.segundos == s,
+                        onSelected: alerta.ativo
+                            ? (_) => alerta.definirSegundos(s)
+                            : null,
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

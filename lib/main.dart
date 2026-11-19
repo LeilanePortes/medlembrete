@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app.dart';
+import 'services/alerta_esquecido_service.dart';
 import 'services/dose_repository.dart';
 import 'services/location_service.dart';
 import 'services/medicamento_repository.dart';
@@ -22,6 +23,8 @@ Future<void> main() async {
 
   // Começa a ler o acelerômetro (X, Y, Z) enquanto o app estiver aberto.
   MovimentoService.instance.iniciar();
+  // Desafio extra: notifica quando o celular parece esquecido.
+  await AlertaEsquecidoService.instance.iniciar();
 
   runApp(const MedLembreteApp());
 }

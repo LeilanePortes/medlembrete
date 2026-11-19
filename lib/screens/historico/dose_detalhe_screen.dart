@@ -4,13 +4,26 @@ import 'package:flutter/material.dart';
 
 import '../../core/formatters.dart';
 import '../../models/dose.dart';
+import '../../services/detector_movimento.dart';
 import '../../services/dose_repository.dart';
+import '../../services/location_service.dart';
+import '../../widgets/mapa_local.dart';
 
-/// Comprovante completo de uma dose: foto + informações.
+/// Comprovante completo de uma dose: foto, coordenadas, mapa e
+/// estado do celular — tudo na mesma tela (desafio extra).
 class DoseDetalheScreen extends StatelessWidget {
   const DoseDetalheScreen({super.key, required this.dose});
 
   final Dose dose;
+
+  String _textoLocalizacao() {
+    if (!dose.temLocalizacao) return 'O GPS não estava disponível';
+    final coordenadas = 'Lat ${dose.latitude!.toStringAsFixed(6)}  •  '
+        'Lon ${dose.longitude!.toStringAsFixed(6)}';
+    final distancia = dose.distanciaCasaMetros;
+    if (distancia == null) return coordenadas;
+    return '$coordenadas\n${LocationService.formatarDistancia(distancia)} da casa';
+  }
 
   Future<void> _excluir(BuildContext context) async {
     final confirmar = await showDialog<bool>(
@@ -77,9 +90,28 @@ class DoseDetalheScreen extends StatelessWidget {
                   title: const Text('Horário previsto'),
                   subtitle: Text(dose.horarioPrevisto),
                 ),
+                ListTile(
+                  leading: Icon(
+                      dose.emCasa == true ? Icons.home : Icons.location_on),
+                  title: Text(dose.descricaoLocal),
+                  subtitle: Text(_textoLocalizacao()),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.sensors),
+                  title: const Text('Estado do celular'),
+                  subtitle: Text(dose.estadoCelular?.rotulo ?? 'Não registrado'),
+                ),
               ],
             ),
           ),
+          if (dose.temLocalizacao) ...[
+            const SizedBox(height: 16),
+            MapaLocal(
+              latitude: dose.latitude!,
+              longitude: dose.longitude!,
+              casa: LocationService.instance.casa,
+            ),
+          ],
         ],
       ),
     );

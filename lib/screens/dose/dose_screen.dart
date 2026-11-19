@@ -7,8 +7,11 @@ import '../../core/theme/app_theme.dart';
 import '../../models/dose.dart';
 import '../../models/medicamento.dart';
 import '../../services/camera_service.dart';
+import '../../services/detector_movimento.dart';
 import '../../services/dose_repository.dart';
+import '../../services/location_service.dart';
 import '../../services/medicamento_repository.dart';
+import '../../services/movimento_service.dart';
 
 /// Abre a comprovação de dose: se houver mais de um remédio,
 /// pergunta qual está sendo tomado.
@@ -59,6 +62,9 @@ Future<void> abrirComprovacao(BuildContext context) async {
 
 /// Tela "Hora do remédio": o usuário fotografa a caixa ou o comprimido
 /// para comprovar que tomou a dose.
+///
+/// Integração dos recursos: junto com a foto, o comprovante guarda a
+/// localização (em casa ou fora) e o estado do celular (acelerômetro).
 class DoseScreen extends StatefulWidget {
   const DoseScreen({super.key, required this.medicamento});
 
@@ -71,6 +77,26 @@ class DoseScreen extends StatefulWidget {
 class _DoseScreenState extends State<DoseScreen> {
   XFile? _foto;
   bool _salvando = false;
+
+  LeituraGps? _gps;
+  bool _lendoGps = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Lê o GPS em paralelo enquanto o usuário tira a foto.
+    _lerGps();
+  }
+
+  Future<void> _lerGps() async {
+    setState(() => _lendoGps = true);
+    final leitura = await LocationService.instance.obterPosicaoAtual();
+    if (!mounted) return;
+    setState(() {
+      _gps = leitura;
+      _lendoGps = false;
+    });
+  }
 
   Future<void> _capturar({bool galeria = false}) async {
     try {
@@ -94,6 +120,9 @@ class _DoseScreenState extends State<DoseScreen> {
     final m = widget.medicamento;
     final caminho = await CameraService.instance.salvarComprovante(foto);
     final agora = DateTime.now();
+    final posicao = _gps?.sucesso == true ? _gps!.posicao : null;
+    final local = LocationService.instance;
+    final movimento = MovimentoService.instance;
 
     await DoseRepository.instance.registrar(
       Dose(
@@ -104,6 +133,15 @@ class _DoseScreenState extends State<DoseScreen> {
         horarioPrevisto: m.horario,
         dataHora: agora,
         fotoPath: caminho,
+        latitude: posicao?.latitude,
+        longitude: posicao?.longitude,
+        emCasa: posicao == null
+            ? null
+            : local.estaEmCasa(posicao.latitude, posicao.longitude),
+        distanciaCasaMetros: posicao == null
+            ? null
+            : local.distanciaAteCasa(posicao.latitude, posicao.longitude),
+        estadoCelular: movimento.ativo ? movimento.estado : null,
       ),
     );
 
@@ -195,6 +233,8 @@ class _DoseScreenState extends State<DoseScreen> {
                   : Image.file(File(foto.path), fit: BoxFit.cover),
             ),
           ),
+          const SizedBox(height: 12),
+          _PainelContexto(gps: _gps, lendoGps: _lendoGps, onTentar: _lerGps),
           const SizedBox(height: 16),
 
           if (foto == null) ...[
@@ -225,6 +265,95 @@ class _DoseScreenState extends State<DoseScreen> {
               label: const Text('Tirar outra foto'),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Mostra, ao vivo, o que vai ser registrado junto com a foto:
+/// localização (GPS) e estado do celular (acelerômetro).
+class _PainelContexto extends StatelessWidget {
+  const _PainelContexto({
+    required this.gps,
+    required this.lendoGps,
+    required this.onTentar,
+  });
+
+  final LeituraGps? gps;
+  final bool lendoGps;
+  final VoidCallback onTentar;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final local = LocationService.instance;
+
+    Widget gpsInfo;
+    if (lendoGps) {
+      gpsInfo = const ListTile(
+        leading: SizedBox.square(
+          dimension: 24,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        title: Text('Obtendo localização...'),
+      );
+    } else if (gps?.sucesso == true) {
+      final p = gps!.posicao!;
+      final emCasa = local.estaEmCasa(p.latitude, p.longitude);
+      gpsInfo = ListTile(
+        leading: Icon(
+          emCasa == true ? Icons.home : Icons.location_on,
+          color: emCasa == true ? AppTheme.sucesso : AppTheme.alerta,
+        ),
+        title: Text(switch (emCasa) {
+          true => 'Em casa',
+          false => 'Fora de casa',
+          null => 'Localização obtida (casa não definida)',
+        }),
+        subtitle: Text(
+          '${p.latitude.toStringAsFixed(6)}, ${p.longitude.toStringAsFixed(6)}',
+        ),
+      );
+    } else {
+      gpsInfo = ListTile(
+        leading: const Icon(Icons.location_off, color: AppTheme.perigo),
+        title: const Text('Sem localização'),
+        subtitle: Text(gps?.mensagem ?? ''),
+        trailing: IconButton(
+          tooltip: 'Tentar de novo',
+          onPressed: onTentar,
+          icon: const Icon(Icons.refresh),
+        ),
+      );
+    }
+
+    return Card(
+      child: Column(
+        children: [
+          gpsInfo,
+          Divider(height: 1, color: scheme.outlineVariant),
+          ListenableBuilder(
+            listenable: MovimentoService.instance,
+            builder: (context, _) {
+              final movimento = MovimentoService.instance;
+              final estado = movimento.estado;
+              return ListTile(
+                leading: Icon(
+                  estado == EstadoMovimento.emMovimento
+                      ? Icons.directions_walk
+                      : Icons.phone_android,
+                  color: scheme.primary,
+                ),
+                title: Text(
+                  movimento.ativo
+                      ? 'Celular: ${estado.rotulo.toLowerCase()}'
+                      : 'Acelerômetro pausado',
+                ),
+                subtitle: const Text('Registrado pelo acelerômetro'),
+              );
+            },
+          ),
         ],
       ),
     );

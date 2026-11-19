@@ -1,4 +1,9 @@
+import '../services/detector_movimento.dart';
+
 /// Registro (comprovante) de que uma dose foi tomada.
+///
+/// Junta os quatro recursos do app: notificação (horário previsto),
+/// câmera (foto), GPS (onde estava) e acelerômetro (estado do celular).
 class Dose {
   const Dose({
     required this.id,
@@ -8,6 +13,11 @@ class Dose {
     required this.horarioPrevisto,
     required this.dataHora,
     required this.fotoPath,
+    this.latitude,
+    this.longitude,
+    this.emCasa,
+    this.distanciaCasaMetros,
+    this.estadoCelular,
   });
 
   final int id;
@@ -27,6 +37,25 @@ class Dose {
   /// Caminho da foto de comprovação salva no armazenamento do app.
   final String fotoPath;
 
+  /// Coordenadas no momento da confirmação (null se o GPS falhou).
+  final double? latitude;
+  final double? longitude;
+
+  /// true = em casa, false = fora, null = casa não definida / sem GPS.
+  final bool? emCasa;
+  final double? distanciaCasaMetros;
+
+  /// Estado do celular segundo o acelerômetro no momento da confirmação.
+  final EstadoMovimento? estadoCelular;
+
+  bool get temLocalizacao => latitude != null && longitude != null;
+
+  String get descricaoLocal => switch (emCasa) {
+        true => 'Em casa',
+        false => 'Fora de casa',
+        null => temLocalizacao ? 'Casa não definida' : 'Sem localização',
+      };
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'medicamentoId': medicamentoId,
@@ -35,15 +64,30 @@ class Dose {
         'horarioPrevisto': horarioPrevisto,
         'dataHora': dataHora.toIso8601String(),
         'fotoPath': fotoPath,
+        'latitude': latitude,
+        'longitude': longitude,
+        'emCasa': emCasa,
+        'distanciaCasaMetros': distanciaCasaMetros,
+        'estadoCelular': estadoCelular?.name,
       };
 
-  factory Dose.fromJson(Map<String, dynamic> json) => Dose(
-        id: json['id'] as int,
-        medicamentoId: json['medicamentoId'] as int,
-        nomeMedicamento: json['nomeMedicamento'] as String,
-        dosagem: json['dosagem'] as String? ?? '',
-        horarioPrevisto: json['horarioPrevisto'] as String? ?? '',
-        dataHora: DateTime.parse(json['dataHora'] as String),
-        fotoPath: json['fotoPath'] as String,
-      );
+  factory Dose.fromJson(Map<String, dynamic> json) {
+    final estado = json['estadoCelular'] as String?;
+    return Dose(
+      id: json['id'] as int,
+      medicamentoId: json['medicamentoId'] as int,
+      nomeMedicamento: json['nomeMedicamento'] as String,
+      dosagem: json['dosagem'] as String? ?? '',
+      horarioPrevisto: json['horarioPrevisto'] as String? ?? '',
+      dataHora: DateTime.parse(json['dataHora'] as String),
+      fotoPath: json['fotoPath'] as String,
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
+      emCasa: json['emCasa'] as bool?,
+      distanciaCasaMetros: (json['distanciaCasaMetros'] as num?)?.toDouble(),
+      estadoCelular: estado == null
+          ? null
+          : EstadoMovimento.values.asNameMap()[estado],
+    );
+  }
 }

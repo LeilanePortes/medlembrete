@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/formatters.dart';
 import '../../models/dose.dart';
+import '../../services/detector_movimento.dart';
 import '../../services/dose_repository.dart';
 import '../../widgets/placeholder_view.dart';
 import 'dose_detalhe_screen.dart';
@@ -59,18 +60,19 @@ class _DoseTile extends StatelessWidget {
           ),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Hero(
               tag: 'foto-${dose.id}',
               child: Image.file(
                 File(dose.fotoPath),
                 width: 96,
-                height: 96,
+                height: 120,
                 fit: BoxFit.cover,
                 cacheWidth: 200,
                 errorBuilder: (_, _, _) => Container(
                   width: 96,
-                  height: 96,
+                  height: 120,
                   color: scheme.surfaceContainerHighest,
                   child: const Icon(Icons.broken_image_outlined),
                 ),
@@ -90,6 +92,24 @@ class _DoseTile extends StatelessWidget {
                   Text('Previsto: ${dose.horarioPrevisto}',
                       style: TextStyle(
                           color: scheme.onSurfaceVariant, fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _Etiqueta(
+                        icone: dose.emCasa == true
+                            ? Icons.home
+                            : Icons.location_on_outlined,
+                        texto: dose.descricaoLocal,
+                      ),
+                      if (dose.estadoCelular != null)
+                        _Etiqueta(
+                          icone: Icons.sensors,
+                          texto: dose.estadoCelular!.rotulo,
+                        ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -99,6 +119,35 @@ class _DoseTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _Etiqueta extends StatelessWidget {
+  const _Etiqueta({required this.icone, required this.texto});
+
+  final IconData icone;
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: scheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icone, size: 14, color: scheme.onSecondaryContainer),
+          const SizedBox(width: 4),
+          Text(texto,
+              style: TextStyle(
+                  fontSize: 12, color: scheme.onSecondaryContainer)),
+        ],
       ),
     );
   }
