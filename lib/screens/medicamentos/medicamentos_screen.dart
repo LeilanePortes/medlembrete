@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../core/formatters.dart';
+import '../../core/theme/app_theme.dart';
 import '../../models/medicamento.dart';
+import '../../services/dose_repository.dart';
 import '../../services/medicamento_repository.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/placeholder_view.dart';
+import '../dose/dose_screen.dart';
 import 'medicamento_form_screen.dart';
 
 /// Lista de remédios com seus lembretes diários.
@@ -91,7 +95,8 @@ class MedicamentosScreen extends StatelessWidget {
         label: const Text('Adicionar'),
       ),
       body: ListenableBuilder(
-        listenable: repositorio,
+        // Redesenha quando muda um remédio OU quando uma dose é registrada.
+        listenable: Listenable.merge([repositorio, DoseRepository.instance]),
         builder: (context, _) {
           final lista = repositorio.medicamentos;
           if (lista.isEmpty) {
@@ -138,6 +143,7 @@ class _MedicamentoTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final m = medicamento;
+    final tomadaHoje = DoseRepository.instance.tomadaHoje(m.id);
 
     return Card(
       child: Padding(
@@ -165,15 +171,34 @@ class _MedicamentoTile extends StatelessWidget {
                       if (m.dosagem.isNotEmpty)
                         Text(m.dosagem,
                             style: TextStyle(color: scheme.onSurfaceVariant)),
+                      if (tomadaHoje != null)
+                        Text(
+                          '✅ Tomado hoje às ${formatarHora(tomadaHoje.dataHora)}',
+                          style: const TextStyle(
+                            color: AppTheme.sucesso,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                     ],
                   ),
                 ),
                 Switch(value: m.ativo, onChanged: onAtivo),
               ],
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            // Wrap evita estouro de largura em telas estreitas.
+            Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
+                TextButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => DoseScreen(medicamento: m),
+                    ),
+                  ),
+                  icon: const Icon(Icons.photo_camera_outlined, size: 18),
+                  label: const Text('Tomar'),
+                ),
                 TextButton.icon(
                   onPressed: onTestar,
                   icon: const Icon(Icons.timer_10_outlined, size: 18),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../services/medicamento_repository.dart';
 import '../../services/notification_service.dart';
 import '../dose/dose_screen.dart';
+import '../historico/historico_screen.dart';
 import '../home/home_screen.dart';
 import '../localizacao/localizacao_screen.dart';
 import '../medicamentos/medicamentos_screen.dart';
@@ -66,6 +67,7 @@ class _MainShellState extends State<MainShell> {
     final telas = <Widget>[
       HomeScreen(onNavegar: _irPara),
       const MedicamentosScreen(),
+      const HistoricoScreen(),
       const LocalizacaoScreen(),
       const MovimentoScreen(),
     ];
@@ -85,6 +87,11 @@ class _MainShellState extends State<MainShell> {
             icon: Icon(Icons.medication_outlined),
             selectedIcon: Icon(Icons.medication),
             label: 'Remédios',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.photo_library_outlined),
+            selectedIcon: Icon(Icons.photo_library),
+            label: 'Histórico',
           ),
           NavigationDestination(
             icon: Icon(Icons.location_on_outlined),
