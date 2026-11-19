@@ -38,9 +38,13 @@ class StatusHojeCard extends StatelessWidget {
                         const Text('Hoje',
                             style: TextStyle(
                                 fontSize: 16, fontWeight: FontWeight.w700)),
-                        const Spacer(),
-                        Text('$tomadas de $total doses comprovadas',
-                            style: TextStyle(color: scheme.onSurfaceVariant)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text('$tomadas de $total doses comprovadas',
+                              textAlign: TextAlign.end,
+                              style:
+                                  TextStyle(color: scheme.onSurfaceVariant)),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -80,11 +84,14 @@ class StatusHojeCard extends StatelessWidget {
                   children: [
                     Icon(Icons.sensors, size: 18, color: cor),
                     const SizedBox(width: 6),
-                    Text(
-                      movimento.ativo
-                          ? 'Celular: ${estado.rotulo.toLowerCase()}'
-                          : 'Acelerômetro pausado',
-                      style: TextStyle(color: cor, fontWeight: FontWeight.w600),
+                    Expanded(
+                      child: Text(
+                        movimento.ativo
+                            ? 'Celular: ${estado.rotulo.toLowerCase()}'
+                            : 'Acelerômetro pausado',
+                        style:
+                            TextStyle(color: cor, fontWeight: FontWeight.w600),
+                      ),
                     ),
                   ],
                 );

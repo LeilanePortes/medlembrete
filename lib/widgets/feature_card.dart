@@ -39,6 +39,8 @@ class FeatureCard extends StatelessWidget {
               const Spacer(),
               Text(
                 titulo,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 16,

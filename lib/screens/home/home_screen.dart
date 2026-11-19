@@ -64,13 +64,17 @@ class HomeScreen extends StatelessWidget {
           Text('Funcionalidades',
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
-          GridView.count(
-            crossAxisCount: 2,
+          GridView(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 1,
+            // Altura fixa: com cards quadrados (altura = largura), telas
+            // estreitas não tinham espaço para o texto ("BOTTOM OVERFLOWED").
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              mainAxisExtent: 168,
+            ),
             children: [
               FeatureCard(
                 icon: Icons.notifications_active,
