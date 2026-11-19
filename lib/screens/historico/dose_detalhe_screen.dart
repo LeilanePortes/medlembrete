@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../core/formatters.dart';
@@ -7,6 +5,7 @@ import '../../models/dose.dart';
 import '../../services/detector_movimento.dart';
 import '../../services/dose_repository.dart';
 import '../../services/location_service.dart';
+import '../../widgets/foto_comprovante.dart';
 import '../../widgets/mapa_local.dart';
 
 /// Comprovante completo de uma dose: foto, coordenadas, mapa e
@@ -68,7 +67,7 @@ class DoseDetalheScreen extends StatelessWidget {
             borderRadius: BorderRadius.circular(24),
             child: Hero(
               tag: 'foto-${dose.id}',
-              child: Image.file(File(dose.fotoPath), fit: BoxFit.cover),
+              child: FotoComprovante(referencia: dose.fotoPath),
             ),
           ),
           const SizedBox(height: 16),

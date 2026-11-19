@@ -1,11 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/formatters.dart';
 import '../models/dose.dart';
+import 'camera_service.dart';
 
 /// Histórico de doses comprovadas (mais recentes primeiro).
 class DoseRepository extends ChangeNotifier {
@@ -49,8 +49,7 @@ class DoseRepository extends ChangeNotifier {
   /// Remove o registro e apaga a foto do armazenamento.
   Future<void> remover(Dose dose) async {
     _itens.removeWhere((d) => d.id == dose.id);
-    final foto = File(dose.fotoPath);
-    if (await foto.exists()) await foto.delete();
+    await CameraService.instance.apagarComprovante(dose.fotoPath);
     await _persistir();
   }
 

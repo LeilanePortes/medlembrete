@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -35,9 +34,10 @@ Future<void> abrirComprovacao(BuildContext context) async {
               children: [
                 const Padding(
                   padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: Text('Qual remédio você vai tomar?',
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    'Qual remédio você vai tomar?',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
                 ),
                 for (final m in lista)
                   ListTile(
@@ -54,9 +54,7 @@ Future<void> abrirComprovacao(BuildContext context) async {
 
   if (escolhido == null || !context.mounted) return;
   await Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (_) => DoseScreen(medicamento: escolhido),
-    ),
+    MaterialPageRoute<void>(builder: (_) => DoseScreen(medicamento: escolhido)),
   );
 }
 
@@ -76,6 +74,7 @@ class DoseScreen extends StatefulWidget {
 
 class _DoseScreenState extends State<DoseScreen> {
   XFile? _foto;
+  Uint8List? _previa; // bytes da foto para exibir (celular e web)
   bool _salvando = false;
 
   LeituraGps? _gps;
@@ -101,9 +100,16 @@ class _DoseScreenState extends State<DoseScreen> {
   Future<void> _capturar({bool galeria = false}) async {
     try {
       final camera = CameraService.instance;
-      final foto =
-          galeria ? await camera.escolherDaGaleria() : await camera.tirarFoto();
-      if (foto != null) setState(() => _foto = foto);
+      final foto = galeria
+          ? await camera.escolherDaGaleria()
+          : await camera.tirarFoto(context);
+      if (foto == null) return;
+      final bytes = await foto.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _foto = foto;
+        _previa = bytes;
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -118,32 +124,47 @@ class _DoseScreenState extends State<DoseScreen> {
     setState(() => _salvando = true);
 
     final m = widget.medicamento;
-    final caminho = await CameraService.instance.salvarComprovante(foto);
     final agora = DateTime.now();
     final posicao = _gps?.sucesso == true ? _gps!.posicao : null;
     final local = LocationService.instance;
     final movimento = MovimentoService.instance;
 
-    await DoseRepository.instance.registrar(
-      Dose(
-        id: agora.millisecondsSinceEpoch,
-        medicamentoId: m.id,
-        nomeMedicamento: m.nome,
-        dosagem: m.dosagem,
-        horarioPrevisto: m.horario,
-        dataHora: agora,
-        fotoPath: caminho,
-        latitude: posicao?.latitude,
-        longitude: posicao?.longitude,
-        emCasa: posicao == null
-            ? null
-            : local.estaEmCasa(posicao.latitude, posicao.longitude),
-        distanciaCasaMetros: posicao == null
-            ? null
-            : local.distanciaAteCasa(posicao.latitude, posicao.longitude),
-        estadoCelular: movimento.ativo ? movimento.estado : null,
-      ),
-    );
+    try {
+      final caminho = await CameraService.instance.salvarComprovante(foto);
+      await DoseRepository.instance.registrar(
+        Dose(
+          id: agora.millisecondsSinceEpoch,
+          medicamentoId: m.id,
+          nomeMedicamento: m.nome,
+          dosagem: m.dosagem,
+          horarioPrevisto: m.horario,
+          dataHora: agora,
+          fotoPath: caminho,
+          latitude: posicao?.latitude,
+          longitude: posicao?.longitude,
+          emCasa: posicao == null
+              ? null
+              : local.estaEmCasa(posicao.latitude, posicao.longitude),
+          distanciaCasaMetros: posicao == null
+              ? null
+              : local.distanciaAteCasa(posicao.latitude, posicao.longitude),
+          estadoCelular: movimento.ativo ? movimento.estado : null,
+        ),
+      );
+    } catch (e) {
+      // Ex.: armazenamento do navegador cheio (limite de ~5 MB).
+      if (!mounted) return;
+      setState(() => _salvando = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Não foi possível salvar o comprovante. '
+            '${kIsWeb ? 'Exclua comprovantes antigos no Histórico. ' : ''}($e)',
+          ),
+        ),
+      );
+      return;
+    }
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -159,7 +180,7 @@ class _DoseScreenState extends State<DoseScreen> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final m = widget.medicamento;
-    final foto = _foto;
+    final foto = _previa;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Hora do remédio')),
@@ -175,8 +196,11 @@ class _DoseScreenState extends State<DoseScreen> {
             ),
             child: Row(
               children: [
-                Icon(Icons.medication,
-                    size: 48, color: scheme.onPrimaryContainer),
+                Icon(
+                  Icons.medication,
+                  size: 48,
+                  color: scheme.onPrimaryContainer,
+                ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -215,8 +239,11 @@ class _DoseScreenState extends State<DoseScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.add_a_photo_outlined,
-                                size: 64, color: scheme.primary),
+                            Icon(
+                              Icons.add_a_photo_outlined,
+                              size: 64,
+                              color: scheme.primary,
+                            ),
                             const SizedBox(height: 12),
                             const Padding(
                               padding: EdgeInsets.symmetric(horizontal: 32),
@@ -230,7 +257,7 @@ class _DoseScreenState extends State<DoseScreen> {
                         ),
                       ),
                     )
-                  : Image.file(File(foto.path), fit: BoxFit.cover),
+                  : Image.memory(foto, fit: BoxFit.cover),
             ),
           ),
           const SizedBox(height: 12),
@@ -245,7 +272,11 @@ class _DoseScreenState extends State<DoseScreen> {
             ),
             TextButton(
               onPressed: () => _capturar(galeria: true),
-              child: const Text('Sem câmera? Escolher da galeria'),
+              child: Text(
+                kIsWeb
+                    ? 'Sem webcam? Escolher um arquivo de imagem'
+                    : 'Sem câmera? Escolher da galeria',
+              ),
             ),
           ] else ...[
             FilledButton.icon(

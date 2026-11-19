@@ -19,14 +19,31 @@ Aplicativo Flutter que **lembra o horário do remédio** e pede uma **foto da ca
 
 ## ▶️ Como rodar
 
-Pré-requisitos: Flutter 3.47+ (Dart 3.13+), **Android Studio com Android SDK** (plataforma **API 37**) e um celular Android ou emulador.
+Pré-requisitos: Flutter 3.47+ (Dart 3.13+) e Google Chrome. **Não precisa de Android Studio.**
+
+### 🌐 No Chrome (forma usada na apresentação)
 
 ```bash
 flutter pub get
-flutter run
+flutter run -d chrome
 ```
 
-> **Celular real é o ideal** — o emulador não tem acelerômetro de verdade (dá para simular em *Extended controls → Virtual sensors*) e a câmera é virtual. Para o GPS no emulador, defina uma posição em *Extended controls → Location*.
+No VS Code: escolha **Chrome** como dispositivo na barra inferior e aperte **F5** (ou use a configuração *"MedLembrete (Chrome)"* em `.vscode/launch.json`).
+
+> **Para a apresentação, prefira o modo servidor:** `flutter run -d web-server --web-port 8080` e abra **http://localhost:8080** no seu Chrome normal (configuração *"MedLembrete (apresentação: localhost:8080)"*). No `-d chrome` o Flutter abre um Chrome "de depuração" em que **clicar na notificação não abre o app** (limitação do plugin) e as permissões são esquecidas a cada execução.
+
+Como cada recurso funciona no navegador:
+
+| Recurso | No Chrome do computador |
+|---|---|
+| 🔔 Notificação | Notificação do Windows. O lembrete é agendado com um `Timer` e dispara **enquanto a aba estiver aberta** (pode estar minimizada) |
+| 📷 Câmera | Abre a **webcam** dentro do app (pacote `camera`). Sem webcam: *"Escolher um arquivo de imagem"* |
+| 📍 GPS | Localização do navegador (Wi-Fi/Windows). Para simular uma posição: **F12 → ⋮ → More tools → Sensors → Location** |
+| 📈 Acelerômetro | PC não tem acelerômetro: o app detecta isso e liga o **modo simulação** (botões *Na mesa*, *Andando* e *Chacoalhar*). Os valores simulados passam pelo **mesmo detector** usado no celular |
+
+### 📱 No celular Android (opcional)
+
+Precisa do Android SDK. Com o celular ligado no USB e a depuração USB ativada: `flutter run`. No celular o acelerômetro e a câmera são reais e as notificações são agendadas no sistema (chegam mesmo com o app fechado).
 
 O mapa precisa de **internet**.
 
@@ -35,7 +52,7 @@ O mapa precisa de **internet**.
 ## 🧭 Fluxo do aplicativo
 
 ```
-Abrir o app ──► pede permissão de NOTIFICAÇÃO
+Abrir o app ──► pede permissão de NOTIFICAÇÃO (no Chrome: aviso com botão "Permitir")
    │
    ├─ Remédios ─► + Adicionar (nome, dosagem, horário) ─► lembrete diário agendado
    │                └─ "Testar" ─► notificação em 10 s (para demonstração)
@@ -61,8 +78,11 @@ Abrir o app ──► pede permissão de NOTIFICAÇÃO
 | `INTERNET` | Android | Automática | Carregar o mapa |
 | Câmera | Android | Não precisa: o `image_picker` usa o app de câmera do sistema | Foto do comprovante |
 | `NSCameraUsageDescription`, `NSLocationWhenInUseUsageDescription`, `NSMotionUsageDescription`, `NSPhotoLibraryUsageDescription` | iOS | Na primeira utilização | Textos exigidos pela Apple |
+| Notificações | Chrome | Botão **Permitir** do aviso no topo (o navegador só deixa pedir após um clique) | Exibir os lembretes |
+| Câmera | Chrome | Ao abrir a webcam | Foto do comprovante |
+| Local | Chrome | Na aba Local ou ao comprovar uma dose | Latitude/longitude |
 
-O acelerômetro **não exige permissão** no Android.
+O acelerômetro **não exige permissão** no Android. Se alguma permissão for bloqueada no Chrome, libere clicando no **cadeado** ao lado do endereço do site.
 
 ## 📦 Bibliotecas
 
@@ -70,7 +90,9 @@ O acelerômetro **não exige permissão** no Android.
 |---|---|
 | `flutter_local_notifications` | Notificações locais e agendamento (`zonedSchedule`) |
 | `timezone` + `flutter_timezone` | Fuso horário local para agendar no horário certo |
-| `image_picker` | Abrir a câmera e capturar a foto |
+| `image_picker` | Abrir a câmera (celular) e escolher imagem da galeria/arquivo |
+| `camera` | Webcam dentro do app no navegador (pré-visualização + foto) |
+| `web` | Canvas do navegador para desespelhar a foto da webcam |
 | `path_provider` | Pasta de documentos do app para guardar as fotos |
 | `geolocator` | Permissão, latitude/longitude e distância até a casa |
 | `sensors_plus` | Stream do acelerômetro (X, Y, Z) |
@@ -89,10 +111,12 @@ lib/
 │   └── dose.dart             # comprovante: foto + GPS + estado do celular
 ├── services/                 # regras de negócio e acesso aos recursos
 │   ├── notification_service.dart     # 🔔 notificações
-│   ├── camera_service.dart           # 📷 câmera
+│   ├── camera_service.dart           # 📷 câmera (arquivo no celular, data URL na web)
+│   ├── espelhar_foto*.dart           # 📷 desfaz o espelho da webcam (só web)
 │   ├── location_service.dart         # 📍 GPS e "em casa/fora"
 │   ├── movimento_service.dart        # 📈 stream do acelerômetro
 │   ├── detector_movimento.dart       # lógica pura: parado/movimento/brusco
+│   ├── simulador_acelerometro.dart   # 📈 X, Y, Z simulados (PC sem sensor)
 │   ├── alerta_esquecido_service.dart # ⭐ notificação por condição
 │   ├── medicamento_repository.dart   # persistência dos remédios
 │   ├── dose_repository.dart          # persistência do histórico
@@ -117,6 +141,7 @@ O desenvolvimento foi feito em sprints, cada uma em sua branch, mergeada na `mai
 | 4 | `sprint-4/acelerometro` | X, Y, Z em tempo real + detecção de estado |
 | 5 | `sprint-5/integracao` | Desafio extra: comprovante completo, mapa, alerta de esquecido |
 | 6 | `sprint-6/docs` | README e roteiro da apresentação |
+| 7 | `sprint-7/web` | Rodar no Chrome: webcam, fotos no navegador, lembretes por timer, modo simulação do acelerômetro |
 
 ```bash
 git log --oneline --graph   # ver o histórico das sprints
@@ -129,15 +154,16 @@ flutter analyze
 flutter test
 ```
 
-Os testes cobrem modelos, repositórios, cálculo de distância/“em casa”, o detector de movimento e o resumo do dia.
+Os testes cobrem modelos, repositórios, cálculo de distância/“em casa”, o detector de movimento, o resumo do dia, o simulador do acelerômetro, a conversão das fotos para data URL e o cálculo do próximo horário na web.
 
 ## 🧪 Checklist antes da apresentação
 
-- [ ] `flutter run` no celular que será usado na apresentação
-- [ ] Permitir **notificações** (e "Alarmes e lembretes", se o Android pedir)
+- [ ] `flutter run -d web-server --web-port 8080` e abrir **http://localhost:8080** no Chrome que será projetado
+- [ ] Clicar em **Permitir** no aviso de notificações (e aceitar no pop-up do Chrome)
+- [ ] Windows: **Configurações → Sistema → Notificações** ligadas para o Chrome e **"Não perturbe" desligado**
 - [ ] Cadastrar um remédio e usar **"Testar"** → a notificação chega em 10 s
-- [ ] Tocar na notificação → tirar a foto → confirmar
+- [ ] Clicar na notificação → abrir a webcam → tirar a foto → confirmar
 - [ ] Na aba **Local**: permitir localização → "Estou em casa agora"
-- [ ] Na aba **Movimento**: deixar o celular na mesa → muda para "Parado" → depois de 30 s chega "📱 Celular esquecido?"
+- [ ] Na aba **Movimento**: modo simulação ligado → *Na mesa* → "Parado" → depois de 30 s chega "📱 Celular esquecido?"
 - [ ] Conferir internet para o mapa
-- [ ] Desativar o modo "Não perturbe"
+- [ ] Testar a webcam do notebook que será usado (ou ter uma imagem da caixa do remédio salva para o plano B)

@@ -279,8 +279,9 @@ class _CartaoErro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final podeConfigurar = leitura.status == StatusGps.servicoDesligado ||
-        leitura.status == StatusGps.permissaoNegadaSempre;
+    final podeConfigurar = LocationService.podeAbrirConfiguracoes &&
+        (leitura.status == StatusGps.servicoDesligado ||
+            leitura.status == StatusGps.permissaoNegadaSempre);
     return Card(
       color: AppTheme.perigo.withValues(alpha: 0.1),
       child: Padding(
