@@ -14,6 +14,7 @@ Aplicativo Flutter que **lembra o horário do remédio** e pede uma **foto da ca
 - **Mapa** (OpenStreetMap) com a localização atual e o raio da casa.
 - **Notificação por condição**: se o celular fica parado pelo tempo configurado (30 s, 1, 5 ou 15 min), o app avisa "📱 Celular esquecido?" e lista as doses ainda não comprovadas.
 - **Movimento brusco**: chacoalhar o celular é detectado e contado.
+- **Estoque acabando**: cada dose comprovada desconta do estoque; quando sobram doses para poucos dias, o app avisa "📦 Losartana está acabando".
 
 ---
 
@@ -101,6 +102,26 @@ Na hora de comprovar, o app escolhe **a dose ainda não tomada mais próxima do 
 
 Remédios cadastrados antes dessa versão continuam funcionando como **1x ao dia, todos os dias, uso contínuo**.
 
+## 📦 Estoque (opcional)
+
+No mesmo cadastro do remédio, a seção **Controlar estoque** guarda:
+
+| Campo | Exemplo |
+|---|---|
+| **Unidade** | comprimidos, cápsulas, gotas ou mL |
+| **Quantidade em casa** | 30 |
+| **Por dose** | 1 (quanto descontar a cada dose) |
+| **Avisar quando der só para** | 1, 3, 5 ou 7 dias (padrão: 3) |
+
+- Ao ligar o controle, a quantidade já vem sugerida: o total de doses do tratamento (se ele tiver fim) ou 30.
+- O formulário mostra na hora se o estoque **dá para N dias**, se é **suficiente para todo o tratamento** ou se **faltam X unidades** para terminar.
+- Cada dose **comprovada com foto** desconta do estoque; excluir o comprovante devolve a quantidade.
+- Na lista de remédios aparece *"Restam 12 comprimidos (≈ 12 dias)"* e o botão **Repor** (+10, +20, +30, +60 ou outro valor).
+- Quando o estoque **cruza** o limite, chega a notificação *"📦 Losartana está acabando"*. Ela dispara uma vez, não a cada dose, e o toque abre a lista de remédios. A tela inicial também mostra "📦 Acabando".
+- Se o estoque **acabar**, os lembretes continuam (a pessoa pode ter comprado e esquecido de repor no app), mas o texto passa a pedir a reposição.
+
+A conta de dias usa a agenda do remédio (frequência e dias da semana) e começa na próxima dose.
+
 ## 🔐 Permissões
 
 | Permissão | Plataforma | Quando é pedida | Por quê |
@@ -156,6 +177,7 @@ lib/
 │   ├── alerta_esquecido_service.dart # ⭐ notificação por condição
 │   ├── medicamento_repository.dart   # persistência dos remédios
 │   ├── dose_repository.dart          # persistência do histórico
+│   ├── estoque_service.dart          # 📦 desconta, devolve, repõe e avisa
 │   └── resumo_doses.dart             # doses pendentes e progresso do dia
 ├── screens/                  # uma pasta por tela
 └── widgets/                  # componentes reutilizáveis (mapa, gráfico, cards)
@@ -179,6 +201,7 @@ O desenvolvimento foi feito em sprints, cada uma em sua branch, mergeada na `mai
 | 6 | `sprint-6/docs` | README e documentação |
 | 7 | `sprint-7/web` | Rodar no Chrome: webcam, fotos no navegador, lembretes por timer, modo simulação do acelerômetro |
 | 8 | `sprint-8/agendamento` | Agenda completa: data de início, frequência (de X em X horas), dias da semana e duração do tratamento |
+| 9 | `sprint-9/estoque` | Controle de estoque no cadastro, desconto a cada dose, botão "Repor" e aviso de remédio acabando |
 
 ```bash
 git log --oneline --graph   # ver o histórico das sprints
@@ -191,7 +214,7 @@ flutter analyze
 flutter test
 ```
 
-Os testes cobrem modelos, repositórios, cálculo de distância/“em casa”, o detector de movimento, o resumo do dia, o simulador do acelerômetro, a conversão das fotos para data URL e a agenda dos remédios (frequência, dias da semana, duração, dose a comprovar).
+Os testes cobrem modelos, repositórios, cálculo de distância/“em casa”, o detector de movimento, o resumo do dia, o simulador do acelerômetro, a conversão das fotos para data URL a agenda dos remédios (frequência, dias da semana, duração, dose a comprovar), o estoque (consumo, previsão de dias, desconto, devolução e aviso) e o layout das telas em 320, 360 e 1280 px.
 
 ## 🧪 Testando cada recurso
 
@@ -199,6 +222,7 @@ Os testes cobrem modelos, repositórios, cálculo de distância/“em casa”, o
 - [ ] Clicar em **Permitir** no aviso de notificações (e aceitar no pop-up do Chrome)
 - [ ] Windows: **Configurações → Sistema → Notificações** ligadas para o Chrome e **"Não perturbe" desligado**
 - [ ] Cadastrar um remédio (ex.: de 8 em 8 h por 7 dias) e conferir o **resumo da agenda** antes de salvar
+- [ ] Ligar **Controlar estoque** com pouca quantidade → aparece "Faltam X para terminar o tratamento"; comprovar uma dose → o estoque diminui; **Repor** → volta a subir
 - [ ] Usar **"Testar"** → a notificação chega em 10 s
 - [ ] Clicar na notificação → abrir a webcam → tirar a foto → confirmar
 - [ ] Na aba **Local**: permitir localização → "Estou em casa agora"
